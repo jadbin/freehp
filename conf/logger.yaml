@@ -1,0 +1,16 @@
+version: 1
+
+loggers:
+  freeproxy:
+    level: INFO
+    handlers: [console]
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: default
+
+formatters:
+  default:
+    format: "%(asctime)s %(name)s: [%(levelname)s] %(message)s"
+    datefmt: "%b/%d/%Y %H:%M:%S"
