@@ -1,5 +1,3 @@
-agent_addr: {AGENT_IP}:{AGENT_PORT}
-
 initial_pages:
   - url: "http://www.xicidaili.com/nn/[page]"
     page: 1-3

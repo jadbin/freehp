@@ -1,14 +1,14 @@
-Freeproxy
-=========
+Free HTTP Proxy
+===============
 
 .. image:: https://img.shields.io/badge/license-Apache 2-blue.svg
-    :target: https://github.com/jadbin/freeproxy/blob/master/LICENSE
+    :target: https://github.com/jadbin/freehp/blob/master/LICENSE
 
 
 Overview
 --------
 
-Free HTTP proxy spider using POST requests to send the proxies scraped.
+A spider to scrap free HTTP proxies.
 
 Requirements
 ------------
