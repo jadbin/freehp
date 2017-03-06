@@ -13,6 +13,7 @@ import async_timeout
 
 from freehp.ds import PriorityQueue
 from freehp.data import ProxyInfo, ProxyDb
+from freehp.spider import ProxySpider
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class Agent:
         self.config = config
         self._agent_listen = config.get("agent_listen")
         self._loop = asyncio.new_event_loop()
+        self._spider = ProxySpider(config)
         self._managers = {}
         self._proxy_db = ProxyDb(os.path.join(config.get("data_dir"), "proxydb"))
         self._semaphore = asyncio.Semaphore(config.get("proxy_checker_clients"), loop=self._loop)
@@ -58,6 +60,13 @@ class Agent:
         host, port = self._agent_listen.split(":")
         port = int(port)
         self._loop.run_until_complete(self._loop.create_server(app.make_handler(access_log=None), host, port))
+
+    def _add_spider(self):
+        def _callback(*addr_list):
+            for manager in self._managers.values():
+                manager.add_proxy(*addr_list)
+
+        self._spider.bind(self._loop, _callback)
 
     def _add_managers(self):
         for manager in self._managers.values():
