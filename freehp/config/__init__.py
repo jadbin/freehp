@@ -9,7 +9,7 @@ default_config = {
     "log_level": "INFO",
     "log_format": "%(asctime)s %(name)s [%(levelname)s]: %(message)s",
     "log_dateformat": "%Y-%m-%d %H:%M:%S",
-    "agent_listen": "0.0.0.0:8080",
+    "agent_listen": "0.0.0.0:8081",
     "spider_update_time": 300,
     "spider_timeout": 30,
     "spider_sleep_time": 10,
