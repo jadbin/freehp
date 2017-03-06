@@ -1,11 +1,12 @@
 # coding=utf-8
 
+from freehp.config import default_config
 from freehp.errors import UsageError
 
 
 class Command:
     def __init__(self):
-        self.config = {}
+        self.config = default_config
         self.exitcode = 0
 
     @property

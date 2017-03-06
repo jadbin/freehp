@@ -3,7 +3,6 @@
 from os.path import isfile, abspath
 import logging.config
 
-from freehp.errors import UsageError
 from freehp.commands import Command
 from freehp.utils.log import configure_logging
 from freehp.utils.config import load_config_file
@@ -15,7 +14,7 @@ log = logging.getLogger(__name__)
 class RunCommand(Command):
     @property
     def syntax(self):
-        return "<config_file>"
+        return "[config_file]"
 
     @property
     def name(self):
@@ -34,15 +33,15 @@ class RunCommand(Command):
         Command.process_arguments(self, args)
 
     def run(self, args):
-        if not args.config_file:
-            raise UsageError()
-        if not isfile(args.config_file):
-            self.exitcode = 1
-            print("Error: Connot find '{}'".format(abspath(args.config_file)))
-            return
+        if args.config_file:
+            if isfile(args.config_file):
+                for k, v in load_config_file(args.config_file).items():
+                    self.config[k] = v
+            else:
+                self.exitcode = 1
+                print("Error: Connot find '{}'".format(abspath(args.config_file)))
+                return
 
-        for k, v in load_config_file(args.config_file).items():
-            self.config[k] = v
         configure_logging(self.config)
 
         agent = Agent(self.config)

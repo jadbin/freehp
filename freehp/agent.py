@@ -22,7 +22,7 @@ class Agent:
         self._agent_listen = config.get("agent_listen")
         self._loop = asyncio.new_event_loop()
         self._managers = {}
-        self._proxy_db = ProxyDb(os.path.join(config.get("data_dir"), "proxy-db"))
+        self._proxy_db = ProxyDb(os.path.join(config.get("data_dir"), "proxydb"))
         self._semaphore = asyncio.Semaphore(config.get("proxy_checker_clients"), loop=self._loop)
         proxy_checkers_config = config.get("proxy_checkers")
         if proxy_checkers_config:
@@ -64,13 +64,17 @@ class Agent:
         if count:
             count = int(count)
         detail = "detail" in params
-        log.debug("GET '/{}', count={}, detail={}".format(key, count, detail))
+        log.info("GET '/{}', count={}, detail={}".format(key, count, detail))
         if key in self._managers:
             proxy_list = self._managers[key].get_proxy_list(count, detail=detail)
             return web.Response(body=json.dumps(proxy_list).encode("utf-8"),
                                 charset="utf-8",
                                 content_type="application/json")
-        return web.Response(body=b"404 not found", status=404)
+
+        return web.Response(body=b"404: Not Found",
+                            status=404,
+                            charset="utf-8",
+                            content_type="text/plain")
 
 
 class ProxyManager:
