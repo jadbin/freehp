@@ -1,6 +1,6 @@
 # coding=utf-8
 
-import os
+from os.path import join
 import re
 import json
 import time
@@ -12,7 +12,7 @@ from aiohttp import web
 import async_timeout
 
 from freehp.ds import PriorityQueue
-from freehp.data import ProxyInfo, ProxyDb
+from freehp.data import ProxyInfo, ProxyDb, FreehpDb
 from freehp.spider import ProxySpider
 
 log = logging.getLogger(__name__)
@@ -25,16 +25,11 @@ class Agent:
         self._loop = asyncio.new_event_loop()
         self._spider = ProxySpider(config)
         self._managers = {}
-        self._proxy_db = ProxyDb(os.path.join(config.get("data_dir"), "proxydb"))
-        self._semaphore = asyncio.Semaphore(config.get("proxy_checker_clients"), loop=self._loop)
-        self._config = {}
+        self._db = FreehpDb(join(config.get("data_dir"), "freehp.db"))
+        self._proxy_db = ProxyDb(join(config.get("data_dir"), "proxy.db"))
+        self._semaphore = asyncio.Semaphore(config.getint("proxy_checker_clients"), loop=self._loop)
+        self._init_checkers_config = config.get("proxy_checkers")
         self._futures = {}
-        proxy_checkers_config = config.get("proxy_checkers")
-        if proxy_checkers_config:
-            for k, v in proxy_checkers_config.items():
-                self._config[k] = v
-                checker = ProxyChecker(**v, loop=self._loop, semaphore=self._semaphore)
-                self._managers[k] = ProxyManager(k, checker, self._proxy_db, config)
         self._is_running = False
 
     def start(self):
@@ -42,7 +37,8 @@ class Agent:
             self._is_running = True
             asyncio.set_event_loop(self._loop)
             self._add_server()
-            self._add_managers()
+            self._add_init_managers()
+            self._add_spider()
             try:
                 self._loop.run_forever()
             except Exception:
@@ -56,6 +52,7 @@ class Agent:
         app = web.Application(logger=log, loop=self._loop)
         app.router.add_route("GET", "/api/proxies/{key}", self.get_proxy_list)
         app.router.add_route("GET", "/api/checkers", self.get_checkers_config)
+        app.router.add_route("POST", "/api/checkers", self.add_checkers_config)
         app.router.add_route("DELETE", "/api/checkers/{key}", self.delete_checkers_config)
         host, port = self._agent_listen.split(":")
         port = int(port)
@@ -68,10 +65,23 @@ class Agent:
 
         self._spider.bind(self._loop, _callback)
 
-    def _add_managers(self):
-        for manager in self._managers.values():
-            f = asyncio.ensure_future(manager.check_proxy_regularly(), loop=self._loop)
-            self._futures[manager.name] = f
+    def _add_init_managers(self):
+        checkers = {}
+        for i in self._db.find_checkers():
+            checkers[i.name] = i.config
+        if self._init_checkers_config:
+            for k, v in self._init_checkers_config.items():
+                self._db.update_checker(k, v)
+                checkers[k] = v
+        for k, v in checkers.items():
+            self._add_manager(k, **v)
+
+    def _add_manager(self, name, **kwargs):
+        self._proxy_db.create_table(name)
+        checker = ProxyChecker(**kwargs, loop=self._loop, semaphore=self._semaphore)
+        self._managers[name] = ProxyManager(name, checker, self._proxy_db, self.config)
+        f = asyncio.ensure_future(self._managers[name].check_proxy_regularly(self._loop), loop=self._loop)
+        self._futures[name] = f
 
     async def get_proxy_list(self, request):
         key = request.match_info.get("key")
@@ -92,7 +102,10 @@ class Agent:
                             content_type="text/plain")
 
     async def get_checkers_config(self, request):
-        return web.Response(body=json.dumps(self._config).encode("utf-8"),
+        checkers = {}
+        for i in self._db.find_checkers():
+            checkers[i.name] = checkers[i].config
+        return web.Response(body=json.dumps(checkers).encode("utf-8"),
                             charset="utf-8",
                             content_type="application/json")
 
@@ -104,11 +117,7 @@ class Agent:
                                 status=403,
                                 charset="utf-8",
                                 content_type="text/plain")
-        self._config[key] = c
-        checker = ProxyChecker(**c, loop=self._loop, semaphore=self._semaphore)
-        self._managers[key] = ProxyManager(key, checker, self._proxy_db, self.config)
-        f = asyncio.ensure_future(self._managers[key].check_proxy_regularly(), loop=self._loop)
-        self._futures[key] = f
+        self._add_manager(key, **c)
         return web.Response(body=json.dumps(c).encode("utf-8"),
                             charset="utf-8",
                             content_type="application/json")
@@ -116,13 +125,14 @@ class Agent:
     async def delete_checkers_config(self, request):
         key = request.match_info.get("key")
         if key in self._managers:
-            c = self._config[key]
-            del self._managers[key]
-            del self._config[key]
+            checker = self._db.find_checker(key)
+            if checker:
+                self._db.delete_checker(key)
             if key in self._futures:
                 self._futures[key].cancel()
                 del self._futures[key]
-            return web.Response(body=json.dumps(c).encode("utf-8"),
+            del self._managers[key]
+            return web.Response(body=json.dumps(checker.config if checker else {}).encode("utf-8"),
                                 charset="utf-8",
                                 content_type="application/json")
         return web.Response(body=b"404: Not Found",
@@ -136,11 +146,11 @@ class ProxyManager:
         self.name = name
         self._checker = checker
         self._proxy_db = proxy_db
-        self._check_interval = config.get("proxy_check_interval")
-        self._block_time = config.get("proxy_block_time")
-        self._fail_times = config.get("proxy_fail_times")
-        queue_size = config.get("proxy_queue_size")
-        backup_size = config.get("proxy_backup_size")
+        self._check_interval = config.getint("proxy_check_interval")
+        self._block_time = config.getint("proxy_block_time")
+        self._fail_times = config.getint("proxy_fail_times")
+        queue_size = config.getint("proxy_queue_size")
+        backup_size = config.getint("proxy_backup_size")
         self._time_line = PriorityQueue(queue_size + backup_size)
         self._proxy_list = PriorityQueue(queue_size)
         self._queue = PriorityQueue(queue_size)
@@ -266,7 +276,7 @@ class ProxyChecker:
         self._body_match = None
         if response:
             if "http_status" in response:
-                self._http_status = response["http_status"]
+                self._http_status = int(response["http_status"])
             if "url_match" in response:
                 self._url_match = re.compile(response["url_match"])
             if "body_match" in response:
@@ -275,7 +285,7 @@ class ProxyChecker:
                 else:
                     encoding = "utf-8"
                 self._body_match = re.compile(response["body_match"].encode(encoding))
-        self._timeout = timeout
+        self._timeout = int(timeout)
         self._loop = loop or asyncio.get_event_loop()
         self._semaphore = semaphore
 

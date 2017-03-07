@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 import aiohttp
+import async_timeout
 
 log = logging.getLogger(__name__)
 
@@ -14,10 +15,10 @@ class ProxySpider:
         self._initial_pages = self._pages_from_config(config.get("initial_pages"))
         self._update_pages = self._pages_from_config(config.get("update_pages"))
         self._proxy_finder = ProxyScraperManager.from_config(config)
-        self._update_time = config.get("spider_update_time")
-        self._timeout = config.get("spider_timeout")
-        self._sleep_time = config.get("spider_sleep_time")
-        self._headers = config.get("spider_headers") or {}
+        self._update_time = config.getint("spider_update_time")
+        self._timeout = config.getint("spider_timeout")
+        self._sleep_time = config.getint("spider_sleep_time")
+        self._headers = config.get("spider_headers", {})
         self._loop = None
         self._callback = None
 
@@ -80,12 +81,12 @@ class ProxySpider:
                 retry_cnt -= 1
                 try:
                     with aiohttp.ClientSession(loop=self._loop) as session:
-                        with aiohttp.Timeout(self._timeout, loop=self._loop):
+                        with async_timeout.timeout(self._timeout, loop=self._loop):
                             async with session.request("GET", u, headers=self._headers) as resp:
                                 url = resp.url
                                 body = await resp.read()
                 except Exception as e:
-                    log.warning("{} error occurred when update proxy on url={}: {}".format(type(e), u, e))
+                    log.info("{} error occurred when update proxy on url={}: {}".format(type(e), u, e))
                 else:
                     retry_cnt = 0
                     addr_list = self._proxy_finder.find_proxy(url, body)
@@ -102,10 +103,10 @@ class ProxyScraperManager:
     @classmethod
     def from_config(cls, config):
         scrapers = []
-        proxy_rules = config.get("proxy_rules")
-        if not isinstance(proxy_rules, list):
-            proxy_rules = [proxy_rules]
-        for i in proxy_rules:
+        scraper_rules = config.get("scraper_rules")
+        if not isinstance(scraper_rules, list):
+            scraper_rules = [scraper_rules]
+        for i in scraper_rules:
             scrapers.append(RegexProxyScraper(i.get("url_match"), i.get("proxy_match")))
         return cls(*scrapers)
 

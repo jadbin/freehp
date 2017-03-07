@@ -60,7 +60,7 @@ update_pages:
   - url: "http://www.mimiip.com/hw/1"
   - url: "http://www.httpdaili.com/mfdl/"
 
-proxy_rules:
+scraper_rules:
   - url_match: "xicidaili\\.com"
     proxy_match: "<td[^>]*>\\s*(\\d+\\.\\d+\\.\\d+\\.\\d+)\\s*</td>\\s*<td[^>]*>\\s*(\\d+)\\s*</td>"
   - url_match: "nianshao\\.me"

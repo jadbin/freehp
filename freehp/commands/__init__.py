@@ -1,12 +1,12 @@
 # coding=utf-8
 
-from freehp.config import default_config
+from freehp.config import Config
 from freehp.errors import UsageError
 
 
 class Command:
     def __init__(self):
-        self.config = default_config
+        self.config = Config()
         self.exitcode = 0
 
     @property
@@ -34,13 +34,13 @@ class Command:
     def process_arguments(self, args):
         # setting
         try:
-            self.config.update(dict(x.split("=", 1) for x in args.set))
+            self.config.update(dict(x.split("=", 1) for x in args.set), priority="cmdline")
         except ValueError:
             raise UsageError("Invalid -s value, use -s NAME=VALUE", print_help=False)
 
         # logger
         if args.log_level:
-            self.config["log_level"] = args.log_level
+            self.config.set("log_level", args.log_level, priority="cmdline")
 
     def run(self, args):
         raise NotImplementedError

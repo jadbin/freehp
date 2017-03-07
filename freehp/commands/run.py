@@ -36,7 +36,7 @@ class RunCommand(Command):
         if args.config_file:
             if isfile(args.config_file):
                 for k, v in load_config_file(args.config_file).items():
-                    self.config[k] = v
+                    self.config.set(k, v, priority="project")
             else:
                 self.exitcode = 1
                 print("Error: Connot find '{}'".format(abspath(args.config_file)))
