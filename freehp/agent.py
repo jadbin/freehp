@@ -102,9 +102,9 @@ class Agent:
                             content_type="text/plain")
 
     async def get_checkers_config(self, request):
-        checkers = {}
+        checkers = []
         for i in self._db.find_checkers():
-            checkers[i.name] = checkers[i].config
+            checkers.append({"name": i.name, "config": i.config})
         return web.Response(body=json.dumps(checkers).encode("utf-8"),
                             charset="utf-8",
                             content_type="application/json")
