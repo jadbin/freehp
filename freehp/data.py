@@ -125,7 +125,6 @@ class FreehpDb:
     def update_checker(self, name, config):
         if not isinstance(config, str):
             config = json.dumps(config)
-        log.info("REPLACE INTO {} (name, config) VALUES ('{}', '{}')".format(self.checker_tbl, name, config))
         self._conn.execute("REPLACE INTO {} (name, config) VALUES ('{}', '{}')".format(self.checker_tbl, name, config))
         self._conn.commit()
 
