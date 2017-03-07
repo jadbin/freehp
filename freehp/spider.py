@@ -43,12 +43,13 @@ class ProxySpider:
         if not config:
             return []
         dm = re.compile(r"^https?://([^/]*)")
+        top_dm = re.compile(r"([a-zA-Z0-9\-]+\.[a-zA-Z0-9\-]+)$")
         k = {}
         res = []
         for i in config:
             j = _get_pages(**i)
             if j:
-                d = dm.findall(j[0])[0]
+                d = top_dm.search(dm.search(j[0]).group(1)).group(1)
                 if d in k:
                     k[d] += j
                 else:
