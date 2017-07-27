@@ -84,7 +84,7 @@ class ProxySpider:
                     with aiohttp.ClientSession(loop=self._loop) as session:
                         with async_timeout.timeout(self._timeout, loop=self._loop):
                             async with session.request("GET", u, headers=self._headers) as resp:
-                                url = resp.url
+                                url = str(resp.url)
                                 body = await resp.read()
                 except Exception as e:
                     log.info("{} error occurred when update proxy on url={}: {}".format(type(e), u, e))

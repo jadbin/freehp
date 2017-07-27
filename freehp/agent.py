@@ -56,7 +56,8 @@ class Agent:
         app.router.add_route("DELETE", "/api/checkers/{key}", self.delete_checkers_config)
         host, port = self._agent_listen.split(":")
         port = int(port)
-        self._loop.run_until_complete(self._loop.create_server(app.make_handler(access_log=None), host, port))
+        self._loop.run_until_complete(
+            self._loop.create_server(app.make_handler(access_log=None, loop=self._loop), host, port))
 
     def _add_spider(self):
         def _callback(*addr_list):
@@ -299,9 +300,10 @@ class ProxyChecker:
                 with aiohttp.ClientSession(loop=self._loop) as session:
                     with async_timeout.timeout(self._timeout, loop=self._loop):
                         async with session.request("GET", self._url, proxy=proxy) as resp:
+                            url = str(resp.url)
                             if resp.status != self._http_status:
                                 return False
-                            if self._url_match and not self._url_match.search(resp.url):
+                            if self._url_match and not self._url_match.search(url):
                                 return False
                             body = await resp.read()
                             if self._body_match and not self._body_match.search(body):
