@@ -1,44 +1,58 @@
 # coding=utf-8
 
 from os.path import join
-import re
 import json
 import time
 import asyncio
 import logging
+from asyncio.queues import Queue
+from io import StringIO
+import yaml
 
-import aiohttp
-from aiohttp import web
+from aiohttp import web, ClientSession
 import async_timeout
 
-from freehp.ds import PriorityQueue
-from freehp.data import ProxyInfo, ProxyDb, FreehpDb
+from freehp.data import ProxyInfo, ProxyDb, PriorityQueue
 from freehp.spider import ProxySpider
+from freehp.utils.project import load_object
+from freehp.utils.config import load_config_file
+from freehp.errors import DownloadingError
+from freehp.config import BaseConfig
 
 log = logging.getLogger(__name__)
 
 
-class Agent:
+class ProxyAgent:
     def __init__(self, config):
         self.config = config
-        self._agent_listen = config.get("agent_listen")
         self._loop = asyncio.new_event_loop()
-        self._spider = ProxySpider(config)
-        self._managers = {}
-        self._db = FreehpDb(join(config.get("data_dir"), "freehp.db"))
-        self._proxy_db = ProxyDb(join(config.get("data_dir"), "proxy.db"))
-        self._semaphore = asyncio.Semaphore(config.getint("proxy_checker_clients"), loop=self._loop)
-        self._init_checkers_config = config.get("proxy_checkers")
-        self._futures = {}
+        config.set('loop', self._loop)
+
+        self._proxy_db = ProxyDb(join(config.get("data_dir"), "freehp-agent.db"))
+        self._proxy_db.create_table()
+
+        self._checker = self._load_checker(config.get("checker_cls"))
+        self._checker_clients = config.getint("checker_clients")
+
+        self._check_interval = config.getint("check_interval")
+        self._block_time = config.getint("block_time")
+        self._proxy_queue = ProxyQueue(config.getint("queue_size"), max_fail_times=config.getint("max_fail_times"))
+
+        self._spider = ProxySpider(self._get_spider_config(config.get('spider_config')))
+
+        self._agent_listen = config.get("agent_listen")
+
+        self._futures = []
+        self._wait_queue = Queue(loop=self._loop)
         self._is_running = False
 
     def start(self):
         if not self._is_running:
             self._is_running = True
             asyncio.set_event_loop(self._loop)
-            self._add_server()
-            self._add_init_managers()
-            self._add_spider()
+            self._init_server()
+            self._init_checker()
+            self._init_spider()
             try:
                 self._loop.run_forever()
             except Exception:
@@ -47,44 +61,88 @@ class Agent:
             finally:
                 self._loop.close()
 
-    def _add_server(self):
+    def _init_server(self):
         log.info("Start agent server on '{}'".format(self._agent_listen))
         app = web.Application(logger=log, loop=self._loop)
-        app.router.add_route("GET", "/api/proxies/{key}", self.get_proxy_list)
-        app.router.add_route("GET", "/api/checkers", self.get_checkers_config)
-        app.router.add_route("POST", "/api/checkers", self.add_checkers_config)
-        app.router.add_route("DELETE", "/api/checkers/{key}", self.delete_checkers_config)
+        app.router.add_route("GET", "/api/proxies", self.get_proxies)
         host, port = self._agent_listen.split(":")
         port = int(port)
         self._loop.run_until_complete(
             self._loop.create_server(app.make_handler(access_log=None, loop=self._loop), host, port))
 
-    def _add_spider(self):
-        def _callback(*addr_list):
-            for manager in self._managers.values():
-                manager.add_proxy(*addr_list)
+    def _get_spider_config(self, config_path):
+        if config_path.startswith("http://") or config_path.startswith("https://"):
+            config = self._loop.run_until_complete(self._download_spider_config(config_path))
+            if config is None:
+                raise DownloadingError("Unable to download the configuration of spider: {}".format(config_path))
+        else:
+            config = load_config_file(config_path)
+        return BaseConfig(config)
 
-        self._spider.bind(self._loop, _callback)
+    async def _download_spider_config(self, url):
+        try:
+            async with ClientSession(loop=self._loop) as session:
+                with async_timeout.timeout(20, loop=self._loop):
+                    async with session.request("GET", url) as resp:
+                        if resp.status / 100 != 2:
+                            log.error("Failed to download spider configuration")
+                        else:
+                            body = await resp.read()
+                            return yaml.load(StringIO(body.decode('utf-8')))
+        except Exception:
+            log.error("Unexpected error occurred when download spider configuration", exc_info=True)
 
-    def _add_init_managers(self):
-        checkers = {}
-        for i in self._db.find_checkers():
-            checkers[i.name] = i.config
-        if self._init_checkers_config:
-            for k, v in self._init_checkers_config.items():
-                self._db.update_checker(k, v)
-                checkers[k] = v
-        for k, v in checkers.items():
-            self._add_manager(k, **v)
+    def _init_spider(self):
+        log.info("Initialize spider")
+        self._spider.bind(self._loop, self._add_proxy)
 
-    def _add_manager(self, name, **kwargs):
-        self._proxy_db.create_table(name)
-        checker = ProxyChecker(**kwargs, loop=self._loop, semaphore=self._semaphore)
-        self._managers[name] = ProxyManager(name, checker, self._proxy_db, self.config)
-        f = asyncio.ensure_future(self._managers[name].check_proxy_regularly(self._loop), loop=self._loop)
-        self._futures[name] = f
+    async def _add_proxy(self, *addr_list):
+        t = int(time.time())
+        for addr in addr_list:
+            try:
+                proxy = self._proxy_db.find_proxy(addr)
+                if proxy and t - proxy.timestamp <= self._block_time:
+                    continue
+                proxy = AgentProxyInfo(addr, t)
+                self._proxy_db.update_timestamp(proxy)
+                await self._wait_queue.put(proxy)
+            except Exception:
+                log.warning("Unexpected error occurred when add proxy '{0}'".format(addr), exc_info=True)
 
-    async def get_proxy_list(self, request):
+    def _init_checker(self):
+        log.info("Initialize checker, clients={}".format(self._checker_clients))
+        f = asyncio.ensure_future(self._find_expired_proxy(), loop=self._loop)
+        self._futures.append(f)
+        for i in range(self._checker_clients):
+            f = asyncio.ensure_future(self._check_proxy(), loop=self._loop)
+            self._futures.append(f)
+
+    def _load_checker(self, cls_path):
+        checker_cls = load_object(cls_path)
+        if hasattr(checker_cls, "from_config"):
+            checker = checker_cls.from_config(self.config)
+        else:
+            checker = checker_cls()
+        return checker
+
+    async def _find_expired_proxy(self):
+        while True:
+            proxy = self._proxy_queue.get_expired_proxy()
+            if proxy is not None:
+                await self._wait_queue.put(proxy)
+            else:
+                await asyncio.sleep(5, loop=self._loop)
+
+    async def _check_proxy(self):
+        while True:
+            proxy = await self._wait_queue.get()
+            ok = await self._checker.check_proxy(proxy.addr)
+            t = int(time.time())
+            proxy.timestamp = t + self._check_interval
+            self._proxy_db.update_timestamp(proxy)
+            self._proxy_queue.feed_back(proxy, ok)
+
+    async def get_proxies(self, request):
         key = request.match_info.get("key")
         params = request.GET
         count = params.get("count", 0)
@@ -92,236 +150,117 @@ class Agent:
             count = int(count)
         detail = "detail" in params
         log.info("GET '/{}', count={}, detail={}".format(key, count, detail))
-        if key in self._managers:
-            proxy_list = self._managers[key].get_proxy_list(count, detail=detail)
-            return web.Response(body=json.dumps(proxy_list).encode("utf-8"),
-                                charset="utf-8",
-                                content_type="application/json")
-        return web.Response(body=b"404: Not Found",
-                            status=404,
-                            charset="utf-8",
-                            content_type="text/plain")
-
-    async def get_checkers_config(self, request):
-        checkers = []
-        for i in self._db.find_checkers():
-            checkers.append({"name": i.name, "config": i.config})
-        return web.Response(body=json.dumps(checkers).encode("utf-8"),
+        proxy_list = self._get_proxies(count, detail=detail)
+        return web.Response(body=json.dumps(proxy_list).encode("utf-8"),
                             charset="utf-8",
                             content_type="application/json")
 
-    async def add_checkers_config(self, request):
-        key = request.match_info.get("key")
-        c = json.loads(request.body.decode("utf-8"))
-        if key in self._managers:
-            return web.Response(body=b"403: Forbidden",
-                                status=403,
-                                charset="utf-8",
-                                content_type="text/plain")
-        self._add_manager(key, **c)
-        return web.Response(body=json.dumps(c).encode("utf-8"),
-                            charset="utf-8",
-                            content_type="application/json")
-
-    async def delete_checkers_config(self, request):
-        key = request.match_info.get("key")
-        if key in self._managers:
-            checker = self._db.find_checker(key)
-            if checker:
-                self._db.delete_checker(key)
-            if key in self._futures:
-                self._futures[key].cancel()
-                del self._futures[key]
-            del self._managers[key]
-            return web.Response(body=json.dumps(checker.config if checker else {}).encode("utf-8"),
-                                charset="utf-8",
-                                content_type="application/json")
-        return web.Response(body=b"404: Not Found",
-                            status=404,
-                            charset="utf-8",
-                            content_type="text/plain")
+    def _get_proxies(self, count, detail=False):
+        t = self._proxy_queue.get_proxies(count)
+        res = []
+        for proxy in t:
+            if detail:
+                res.append({"addr": proxy.addr, "success": proxy.good, "fail": proxy.bad})
+            else:
+                res.append(proxy.addr)
+        return res
 
 
-class ProxyManager:
-    def __init__(self, name, checker, proxy_db, config):
-        self.name = name
-        self._checker = checker
-        self._proxy_db = proxy_db
-        self._check_interval = config.getint("proxy_check_interval")
-        self._block_time = config.getint("proxy_block_time")
-        self._fail_times = config.getint("proxy_fail_times")
-        queue_size = config.getint("proxy_queue_size")
-        backup_size = config.getint("proxy_backup_size")
+class ProxyQueue:
+    def __init__(self, queue_size, *, max_fail_times=2):
+        self._max_fail_times = max_fail_times
+        backup_size = 10 * queue_size
         self._time_line = PriorityQueue(queue_size + backup_size)
         self._proxy_list = PriorityQueue(queue_size)
         self._queue = PriorityQueue(queue_size)
         self._backup = PriorityQueue(backup_size)
 
-    def get_proxy_list(self, count, *, detail=False):
+    def get_proxies(self, count):
         res = []
         total = len(self._queue)
-        if not count or total < count:
+        if count <= 0 or total < count:
             count = total
-        t = []
         i = 1
         while i <= count:
             proxy = self._proxy_list.top()
-            del self._proxy_list[proxy.queue_index]
-            del self._queue[proxy.queue_index]
-            t.append(proxy)
-            if detail:
-                res.append({"addr": proxy.addr, "success": proxy.good, "fail": proxy.bad})
-            else:
-                res.append(proxy.addr)
+            del self._proxy_list[proxy]
+            del self._queue[proxy]
+            res.append(proxy)
             i += 1
-        for proxy in t:
-            i = self._queue.push(proxy, (-proxy.rate, -proxy.timestamp))
+        for proxy in res:
+            self._queue.push(proxy, (-proxy.rate, -proxy.timestamp))
             self._proxy_list.push(proxy, (proxy.rate, proxy.timestamp))
-            proxy.queue_index = i
         return res
 
-    def add_proxy(self, *addr_list):
-        t = int(time.time())
-        for addr in addr_list:
-            try:
-                proxy = self._proxy_db.find_proxy(self.name, addr)
-                if proxy and t - proxy.timestamp <= self._block_time:
-                    continue
-                proxy = ProxyInfo(addr, t)
-                self._proxy_db.update_timestamp(self.name, proxy)
-                if self._backup.is_full():
-                    p = self._backup.top()
-                    if (proxy.rate, -proxy.fail) >= (p.rate, -p.fail):
-                        self._pop_backup(p)
-                        self._push_backup(proxy)
-                else:
-                    self._push_backup(proxy)
-            except Exception:
-                log.warning("Unexpected error occurred when add proxy '{0}'".format(addr), exc_info=True)
-
-    async def check_proxy_regularly(self, loop):
-        while True:
-            proxy = None
-            t = int(time.time())
-            if len(self._time_line) > 0:
-                p = self._time_line.top()
-                if t > p.timestamp:
-                    if p.status == p.IN_QUEUE:
-                        self._pop_queue(p)
-                    elif p.status == p.IN_BACKUP:
-                        self._pop_backup(p)
-                    proxy = p
-            if proxy is not None:
-                await self._checker.check_proxy(proxy.addr, lambda ok, proxy=proxy: self._handle_result(proxy, ok))
-            else:
-                await asyncio.sleep(5, loop=loop)
-
-    def _handle_result(self, proxy, ok):
-        t = int(time.time())
-        proxy.timestamp = t + self._check_interval
-        self._proxy_db.update_timestamp(self.name, proxy)
-        if ok:
-            proxy.good += 1
-            proxy.fail = 0
+    def add_proxy(self, proxy):
+        if proxy.fail == 0:
             if self._queue.is_full():
                 p = self._queue.top()
-                if proxy.rate > p.rate:
+                if proxy.rate >= p.rate:
                     self._pop_queue(p)
                     self._push_queue(proxy)
                     proxy = p
             else:
                 self._push_queue(proxy)
                 proxy = None
-        else:
-            proxy.bad += 1
-            proxy.fail += 1
-            if proxy.fail > self._fail_times:
-                proxy = None
         if proxy is not None:
             if self._backup.is_full():
                 p = self._backup.top()
-                if (proxy.rate, -proxy.fail) > (p.rate, -p.fail):
+                if (proxy.rate, -proxy.fail) >= (p.rate, -p.fail):
                     self._pop_backup(p)
                     self._push_backup(proxy)
             else:
                 self._push_backup(proxy)
 
+    def feed_back(self, proxy, ok):
+        if ok:
+            proxy.good += 1
+            proxy.fail = 0
+            self.add_proxy(proxy)
+        else:
+            proxy.bad += 1
+            proxy.fail += 1
+            if proxy.fail <= self._max_fail_times:
+                self.add_proxy(proxy)
+
+    def get_expired_proxy(self):
+        t = int(time.time())
+        if len(self._time_line) > 0:
+            p = self._time_line.top()
+            if t > p.timestamp:
+                if p.status == p.IN_QUEUE:
+                    self._pop_queue(p)
+                elif p.status == p.IN_BACKUP:
+                    self._pop_backup(p)
+                return p
+
     def _push_queue(self, proxy):
-        proxy.line_index = self._time_line.push(proxy, -proxy.timestamp)
-        proxy.queue_index = self._queue.push(proxy, (-proxy.rate, -proxy.timestamp))
+        self._time_line.push(proxy, -proxy.timestamp)
+        self._queue.push(proxy, (-proxy.rate, -proxy.timestamp))
         self._proxy_list.push(proxy, (proxy.rate, proxy.timestamp))
         proxy.status = proxy.IN_QUEUE
 
     def _pop_queue(self, proxy):
-        del self._time_line[proxy.line_index]
-        del self._queue[proxy.queue_index]
-        del self._proxy_list[proxy.queue_index]
+        del self._time_line[proxy]
+        del self._queue[proxy]
+        del self._proxy_list[proxy]
         proxy.status = None
 
     def _push_backup(self, proxy):
-        proxy.line_index = self._time_line.push(proxy, -proxy.timestamp)
-        proxy.queue_index = self._backup.push(proxy, (-proxy.rate, proxy.fail))
+        self._time_line.push(proxy, -proxy.timestamp)
+        self._backup.push(proxy, (-proxy.rate, proxy.fail))
         proxy.status = proxy.IN_BACKUP
 
     def _pop_backup(self, proxy):
-        del self._time_line[proxy.line_index]
-        del self._backup[proxy.queue_index]
+        del self._time_line[proxy]
+        del self._backup[proxy]
         proxy.status = None
 
 
-class ProxyChecker:
-    def __init__(self, url, response, timeout=10, loop=None, semaphore=None, **kwargs):
-        self._url = url
-        self._http_status = 200
-        self._url_match = None
-        self._body_match = None
-        if response:
-            if "http_status" in response:
-                self._http_status = int(response["http_status"])
-            if "url_match" in response:
-                self._url_match = re.compile(response["url_match"])
-            if "body_match" in response:
-                if "encoding" in response:
-                    encoding = response["encoding"]
-                else:
-                    encoding = "utf-8"
-                self._body_match = re.compile(response["body_match"].encode(encoding))
-        self._timeout = int(timeout)
-        self._loop = loop or asyncio.get_event_loop()
-        self._semaphore = semaphore
+class AgentProxyInfo(ProxyInfo):
+    IN_QUEUE = 1
+    IN_BACKUP = 2
 
-    async def check_proxy(self, addr, callback):
-        async def _check():
-            if not addr.startswith("http://"):
-                proxy = "http://{0}".format(addr)
-            else:
-                proxy = addr
-            try:
-                with aiohttp.ClientSession(loop=self._loop) as session:
-                    with async_timeout.timeout(self._timeout, loop=self._loop):
-                        async with session.request("GET", self._url, proxy=proxy) as resp:
-                            url = str(resp.url)
-                            if resp.status != self._http_status:
-                                return False
-                            if self._url_match and not self._url_match.search(url):
-                                return False
-                            body = await resp.read()
-                            if self._body_match and not self._body_match.search(body):
-                                return False
-            except Exception:
-                return False
-            return True
-
-        async def _task():
-            ok = await _check()
-            try:
-                callback(ok)
-            except Exception:
-                log.warning("Unexpected error occurred in callback", exc_info=True)
-            finally:
-                if self._semaphore:
-                    self._semaphore.release()
-
-        if self._semaphore:
-            await self._semaphore.acquire()
-        asyncio.ensure_future(_task(), loop=self._loop)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = None

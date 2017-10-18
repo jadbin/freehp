@@ -1,12 +1,12 @@
 # coding=utf-8
 
-from freehp.config import Config
+from freehp.config.agent_config import AgentConfig
 from freehp.errors import UsageError
 
 
 class Command:
     def __init__(self):
-        self.config = Config()
+        self.config = AgentConfig()
         self.exitcode = 0
 
     @property

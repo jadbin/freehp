@@ -6,7 +6,7 @@ import logging.config
 from freehp.commands import Command
 from freehp.utils.log import configure_logging
 from freehp.utils.config import load_config_file
-from freehp.agent import Agent
+from freehp.agent import ProxyAgent
 
 log = logging.getLogger(__name__)
 
@@ -44,5 +44,5 @@ class RunCommand(Command):
 
         configure_logging(self.config)
 
-        agent = Agent(self.config)
+        agent = ProxyAgent(self.config)
         agent.start()

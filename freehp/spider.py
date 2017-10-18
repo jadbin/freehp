@@ -81,7 +81,7 @@ class ProxySpider:
             while retry_cnt > 0:
                 retry_cnt -= 1
                 try:
-                    with aiohttp.ClientSession(loop=self._loop) as session:
+                    async with aiohttp.ClientSession(loop=self._loop) as session:
                         with async_timeout.timeout(self._timeout, loop=self._loop):
                             async with session.request("GET", u, headers=self._headers) as resp:
                                 url = str(resp.url)
@@ -93,7 +93,7 @@ class ProxySpider:
                     addr_list = self._proxy_finder.find_proxy(url, body)
                     log.debug("Find {} proxies on the page '{}'".format(len(addr_list), u))
                     if addr_list:
-                        self._callback(*addr_list)
+                        await self._callback(*addr_list)
             await asyncio.sleep(self._sleep_time, loop=self._loop)
 
 

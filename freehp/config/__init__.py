@@ -3,13 +3,10 @@
 import copy
 from collections import MutableMapping
 
-from . import defaultconfig
-
 CONFIG_PRIORITIES = {
     "default": 0,
-    "module": 10,
-    "project": 20,
-    "cmdline": 30
+    "project": 10,
+    "cmdline": 20
 }
 
 
@@ -122,12 +119,3 @@ class BaseConfig(MutableMapping):
 
     def __len__(self):
         return len(self.attributes)
-
-
-class Config(BaseConfig):
-    def __init__(self, values=None, priority="project"):
-        super().__init__()
-        for key in dir(defaultconfig):
-            if key.isupper():
-                self.set(key.lower(), getattr(defaultconfig, key), "default")
-        self.update(values, priority)
