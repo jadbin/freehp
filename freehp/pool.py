@@ -34,7 +34,7 @@ class SimpleProxyPool:
         self.agent_addr = agent_addr
         if loop is None:
             self.asyn = False
-            self.loop = asyncio.get_event_loop()
+            self.loop = asyncio.new_event_loop()
         else:
             self.asyn = True
             self.loop = loop
@@ -104,7 +104,7 @@ class ProxyPool:
         self.agent_addr = agent_addr
         if loop is None:
             self.asyn = False
-            self.loop = asyncio.get_event_loop()
+            self.loop = asyncio.new_event_loop()
         else:
             self.asyn = True
             self.loop = loop
