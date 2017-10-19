@@ -53,7 +53,7 @@ class SimpleProxyPool:
         self.proxies = []
 
     @deasync
-    async def acquire_proxy(self):
+    async def get_proxy(self):
         """
         随机获取其中的某个代理.
         """
