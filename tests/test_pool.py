@@ -77,6 +77,18 @@ class TestSimplePool:
             assert await pool.get_proxy() == target_list[i]
         self.random_iter = 0
 
+    async def test_update_another_proxy_list(self, monkeypatch, test_server, loop):
+        monkeypatch.setattr(random, 'randint', self.randint)
+        server = await self.make_server(test_server)
+        pool = SimpleProxyPool("http://{}:{}".format(server.host, server.port), loop=loop)
+        assert await pool.get_proxy() == 0
+        pool._last_update = 0
+        server.proxy_list = self.make_another_proxy_list()
+        target_list = ([i for i in range(11, 20)] + [10]) * 2
+        for i in range(len(target_list)):
+            assert await pool.get_proxy() == target_list[i]
+        self.random_iter = 0
+
     def make_proxy_list(self):
         proxy_list = []
         for i in range(10):
