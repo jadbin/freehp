@@ -239,7 +239,7 @@ class TestProxyPool:
                                 content_type="application/json")
 
         app = web.Application()
-        app.router.add_route("GET", "/api/proxies", get_proxies)
+        app.router.add_route("GET", "/", get_proxies)
         server = await test_server(app)
         server.proxy_list = self.make_proxy_list()
         return server

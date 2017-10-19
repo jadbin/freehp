@@ -5,7 +5,6 @@ import time
 import asyncio
 import logging
 from collections import deque
-from urllib.parse import urljoin
 import random
 
 import aiohttp
@@ -63,6 +62,7 @@ class SimpleProxyPool:
         self.min_success_rate = min_success_rate
         self.min_count = min_count
         self._last_update = 0
+        self._update_lock = asyncio.Lock(loop=loop)
         self.proxies = []
 
     @deasync
@@ -76,18 +76,18 @@ class SimpleProxyPool:
         return self.proxies[random.randint(0, len(self.proxies) - 1)]
 
     async def _check_update(self):
-        t = time.time()
-        if t > self._last_update:
-            await self._update_proxy_list()
-            self._last_update = t + self.update_interval
+        async with self._update_lock:
+            t = time.time()
+            if t > self._last_update:
+                await self._update_proxy_list()
+                self._last_update = t + self.update_interval
 
     async def _update_proxy_list(self):
         try:
             self.params['detail'] = ''
             async with aiohttp.ClientSession(loop=self.loop) as session:
                 with async_timeout.timeout(self.timeout, loop=self.loop):
-                    async with session.request('GET',
-                                               urljoin(self.agent_addr, '/api/proxies'),
+                    async with session.request('GET', self.agent_addr,
                                                auth=self.auth,
                                                params=self.params) as resp:
                         body = await resp.read()
@@ -292,7 +292,7 @@ class ProxyPool:
             async with aiohttp.ClientSession(loop=self.loop) as session:
                 with async_timeout.timeout(self.timeout, loop=self.loop):
                     async with session.request('GET',
-                                               urljoin(self.agent_addr, '/api/proxies'),
+                                               self.agent_addr,
                                                auth=self.auth,
                                                params=self.params) as resp:
                         body = await resp.read()

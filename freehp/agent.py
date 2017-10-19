@@ -64,7 +64,7 @@ class ProxyAgent:
     def _init_server(self):
         log.info("Start agent server on '{}'".format(self._agent_listen))
         app = web.Application(logger=log, loop=self._loop)
-        app.router.add_route("GET", "/api/proxies", self.get_proxies)
+        app.router.add_route("GET", "/", self.get_proxies)
         host, port = self._agent_listen.split(":")
         port = int(port)
         self._loop.run_until_complete(
