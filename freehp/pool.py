@@ -31,6 +31,19 @@ def deasync(func):
 class SimpleProxyPool:
     def __init__(self, agent_addr, *, min_success_rate=.0, min_count=0,
                  update_interval=300, auth=None, params=None, timeout=20, loop=None):
+        """
+        SimpleProxyPool constructor.
+
+        agent_addr - Proxy agent address.
+        min_success_rate - (optional) The minimum acceptable success rate of a proxy.
+        min_count - (optional) The least number of proxies in the proxy list.
+          It works when pass the `min_success_rate` parameter.
+        update_interval - (optional) Time interval to update the proxy list from proxy agent.
+        auth - (optional) Http Basic Auth tuple.
+        params - (optional) Prameters dictionary be sent in the query.
+        timeout - (optional) Timeout when connects proxy agent.
+        loop - (optional) Event loop.
+        """
         self.agent_addr = agent_addr
         if loop is None:
             self.asyn = False
@@ -89,7 +102,7 @@ class SimpleProxyPool:
                                 else:
                                     break
                             else:
-                                res.append(p.addr)
+                                res.append(p['addr'])
                         self.proxies = res
         except Exception:
             log.warning("Error occurred when get proxy list", exc_info=True)
@@ -98,9 +111,21 @@ class SimpleProxyPool:
 class ProxyPool:
     pool_ratio = 0.8
 
-    def __init__(self, agent_addr, *, pool_size=100,
-                 update_interval=300, block_time=3600, max_fail_times=2,
-                 auth=None, params=None, timeout=20, loop=None):
+    def __init__(self, agent_addr, *, pool_size=100, block_time=3600, max_fail_times=2,
+                 update_interval=300, auth=None, params=None, timeout=20, loop=None):
+        """
+        ProxyPool constructor.
+
+        agent_addr - Proxy agent address.
+        pool_size - (optional) The size of the pool.
+        block_time - (optional) Time for blocking a proxy.
+        max_fail_times - (optional) The maximum acceptable number of the continuous failure of a proxy.
+        update_interval - (optional) Time interval to update the proxy list from proxy agent.
+        auth - (optional) Http Basic Auth tuple.
+        params - (optional) Prameters dictionary be sent in the query.
+        timeout - (optional) Timeout when connects proxy agent.
+        loop - (optional) Event loop.
+        """
         self.agent_addr = agent_addr
         if loop is None:
             self.asyn = False
@@ -153,9 +178,8 @@ class ProxyPool:
         """
         反馈代理是否可用.
 
-        `addr`为代理的地址.
-
-        `ok`表示反馈结果，如果为True表示可用，False表示不可用.
+        addr - 代理的地址.
+        ok - 反馈结果，如果为True表示可用，False表示不可用.
         """
         if addr not in self._proxies:
             if addr in self._trash:
