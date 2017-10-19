@@ -160,12 +160,16 @@ class ProxyPool:
         if addr not in self._proxies:
             if addr in self._trash:
                 proxy = self._trash[addr]
-                if ok:
-                    proxy.good += 1
-                    proxy.fail = 0
-                else:
-                    proxy.bad += 1
-                    proxy.fail += 1
+                if proxy.fail <= self.max_fail_times:
+                    if ok:
+                        proxy.good += 1
+                        proxy.fail = 0
+                        del self._trash[proxy.addr]
+                        proxy.timestamp = time.time()
+                        self._add_proxy(proxy)
+                    else:
+                        proxy.bad += 1
+                        proxy.fail += 1
             return
         proxy = self._proxies[addr]
         if proxy.status == proxy.IN_POOL:
@@ -198,18 +202,10 @@ class ProxyPool:
                 if not self._pool.is_full():
                     if len(self._backup) > 0:
                         p = self._backup_p.top()
+                        self._pop_backup(p)
                         self._push_pool(p)
         if proxy is not None:
-            if not self._backup.is_full():
-                self._push_backup(proxy)
-            else:
-                p = self._backup_n.top()
-                if (proxy.rate, -proxy.fail, proxy.timestamp) > (p.rate, -p.fail, p.timestamp):
-                    self._pop_backup(p)
-                    self._push_backup(proxy)
-                    proxy = p
-        if proxy is not None:
-            self._throw_proxy(proxy)
+            self._push_backup(proxy)
 
     def _get_proxy_from_pool(self):
         p = self._pool.top()
@@ -235,6 +231,7 @@ class ProxyPool:
             self._add_proxy(proxy)
 
     def _add_proxy(self, proxy):
+        self._proxies[proxy.addr] = proxy
         if not self._pool.is_full():
             self._push_pool(proxy)
             proxy = None
@@ -247,6 +244,7 @@ class ProxyPool:
                     proxy = p
             else:
                 self._push_backup(proxy)
+                proxy = None
         if proxy is not None:
             self._throw_proxy(proxy)
 

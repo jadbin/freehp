@@ -33,7 +33,7 @@ def main():
         "aiohttp",
         "pyyaml"
     ]
-    tests_requires = install_requires + ["pytest"]
+    tests_requires = install_requires + ["pytest", "pytest-aiohttp"]
     setup(
         name="freehp",
         version=read_version(),

@@ -85,6 +85,9 @@ class PriorityQueue:
     def __len__(self):
         return self._size - len(self._q)
 
+    def __contains__(self, item):
+        return id(item) in self._index
+
     def __delitem__(self, item):
         ii = id(item)
         if ii not in self._index:
