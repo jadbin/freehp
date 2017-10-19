@@ -11,7 +11,6 @@ Key Features
 
 - Provides proxy agent (server) to scrap free HTTP proxies and verify the usability of each of them.
 - Provides proxy pool (client) to collect the proxies from agent and maintains them locally.
-- Proxy pool supports asynchronous mode.
 
 
 Installation
