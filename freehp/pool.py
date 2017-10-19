@@ -62,7 +62,7 @@ class SimpleProxyPool:
         self.min_success_rate = min_success_rate
         self.min_count = min_count
         self._last_update = 0
-        self._update_lock = asyncio.Lock(loop=loop)
+        self._update_lock = asyncio.Lock(loop=self.loop)
         self.proxies = []
 
     @deasync
@@ -80,7 +80,8 @@ class SimpleProxyPool:
             t = time.time()
             if t > self._last_update:
                 await self._update_proxy_list()
-                self._last_update = t + self.update_interval
+                if len(self.proxies) > 0:
+                    self._last_update = t + self.update_interval
 
     async def _update_proxy_list(self):
         try:
@@ -92,18 +93,19 @@ class SimpleProxyPool:
                                                params=self.params) as resp:
                         body = await resp.read()
                         proxies = json.loads(body.decode('utf-8'))
-                        res = []
-                        for p in proxies:
-                            if self.min_success_rate > 0:
-                                if p['success'] >= self.min_success_rate * (p['success'] + p['fail']):
-                                    res.append(p.addr)
-                                elif self.min_count > 0 and len(res) < self.min_count:
-                                    res.append(p.addr)
+                        if len(proxies) > 0:
+                            res = []
+                            for p in proxies:
+                                if self.min_success_rate > 0:
+                                    if p['success'] >= self.min_success_rate * (p['success'] + p['fail']):
+                                        res.append(p['addr'])
+                                    elif self.min_count > 0 and len(res) < self.min_count:
+                                        res.append(p['addr'])
+                                    else:
+                                        break
                                 else:
-                                    break
-                            else:
-                                res.append(p['addr'])
-                        self.proxies = res
+                                    res.append(p['addr'])
+                            self.proxies = res
         except Exception:
             log.warning("Error occurred when get proxy list", exc_info=True)
 
@@ -134,11 +136,17 @@ class ProxyPool:
             self.asyn = True
             self.loop = loop
         self.auth = auth
+        if self.auth is not None:
+            if isinstance(self.auth, tuple):
+                self.auth = aiohttp.BasicAuth(*self.auth)
+            elif not isinstance(self.auth, aiohttp.BasicAuth):
+                raise TypeError('The type of "auth" must be tuple or aiohttp.BasicAuth')
         self.params = params or {}
         self.timeout = timeout
 
         self.update_interval = update_interval
         self._last_update = 0
+        self._update_lock = asyncio.Lock(loop=self.loop)
         self.max_fail_times = max_fail_times
 
         self._proxies = {}
@@ -281,10 +289,12 @@ class ProxyPool:
             self._block_queue.append((proxy.addr, proxy.timestamp))
 
     async def _check_update(self):
-        t = time.time()
-        if t > self._last_update:
-            await self._update_proxy_list()
-            self._last_update = t + self.update_interval
+        async with self._update_lock:
+            t = time.time()
+            if t > self._last_update:
+                await self._update_proxy_list()
+                if len(self._pool) + len(self._backup) > 0:
+                    self._last_update = t + self.update_interval
 
     async def _update_proxy_list(self):
         try:

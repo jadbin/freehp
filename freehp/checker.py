@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 class HttpbinChecker:
-    def __init__(self, loop=None, timeout=10):
+    def __init__(self, *, loop=None, timeout=10):
         self._loop = loop or asyncio.get_event_loop()
         self._timeout = int(timeout)
 
@@ -47,7 +47,7 @@ class HttpbinChecker:
 
 
 class ResponseMatchChecker:
-    def __init__(self, url, http_status=200, url_pattern=None, body_pattern=None, body_encoding='utf-8', timeout=10,
+    def __init__(self, url, *, http_status=200, url_pattern=None, body_pattern=None, body_encoding='utf-8', timeout=10,
                  loop=None):
         self._url = url
         self._http_status = http_status
