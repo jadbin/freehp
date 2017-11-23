@@ -31,20 +31,34 @@ def test_deasync(loop):
     assert loop.run_until_complete(b.perform_deasync()) is True
 
 
-class TestSimplePool:
-    random_iter = 0
+class Random:
+    def __init__(self):
+        self.iter = 0
 
+    def randint(self, a, b):
+        res = a + self.iter % (b - a + 1)
+        self.iter += 1
+        return res
+
+    def random(self):
+        res = self.iter * 0.1
+        self.iter += 1
+        if self.iter >= 10:
+            self.iter = 0
+        return res
+
+
+class TestSimplePool:
     async def test_get_proxy(self, monkeypatch, test_server, loop):
-        monkeypatch.setattr(random, 'randint', self.randint)
+        monkeypatch.setattr(random, 'randint', Random().randint)
         server = await self.make_server(test_server)
         pool = SimpleProxyPool("http://{}:{}".format(server.host, server.port), loop=loop)
         target_list = [i for i in range(10)] * 2
         for i in range(20):
             assert await pool.get_proxy() == target_list[i]
-        self.random_iter = 0
 
     async def test_no_proxy_available(self, monkeypatch, test_server, loop):
-        monkeypatch.setattr(random, 'randint', self.randint)
+        monkeypatch.setattr(random, 'randint', Random().randint)
         server = await self.make_server(test_server)
         pool = SimpleProxyPool("http://{}:{}".format(server.host, server.port), loop=loop)
         server.proxy_list = []
@@ -55,30 +69,27 @@ class TestSimplePool:
         pool._last_update = 0
         server.proxy_list = []
         assert await pool.get_proxy() == 1
-        self.random_iter = 0
 
     async def test_min_success_rate(self, monkeypatch, test_server, loop):
-        monkeypatch.setattr(random, 'randint', self.randint)
+        monkeypatch.setattr(random, 'randint', Random().randint)
         server = await self.make_server(test_server)
         pool = SimpleProxyPool("http://{}:{}".format(server.host, server.port),
                                min_success_rate=0.8, loop=loop)
         target_list = [i for i in range(7)] * 2
         for i in range(len(target_list)):
             assert await pool.get_proxy() == target_list[i]
-        self.random_iter = 0
 
     async def test_min_count(self, monkeypatch, test_server, loop):
-        monkeypatch.setattr(random, 'randint', self.randint)
+        monkeypatch.setattr(random, 'randint', Random().randint)
         server = await self.make_server(test_server)
         pool = SimpleProxyPool("http://{}:{}".format(server.host, server.port),
                                min_success_rate=0.8, min_count=8, loop=loop)
         target_list = [i for i in range(8)] * 2
         for i in range(len(target_list)):
             assert await pool.get_proxy() == target_list[i]
-        self.random_iter = 0
 
     async def test_update_another_proxy_list(self, monkeypatch, test_server, loop):
-        monkeypatch.setattr(random, 'randint', self.randint)
+        monkeypatch.setattr(random, 'randint', Random().randint)
         server = await self.make_server(test_server)
         pool = SimpleProxyPool("http://{}:{}".format(server.host, server.port), loop=loop)
         assert await pool.get_proxy() == 0
@@ -87,7 +98,6 @@ class TestSimplePool:
         target_list = ([i for i in range(11, 20)] + [10]) * 2
         for i in range(len(target_list)):
             assert await pool.get_proxy() == target_list[i]
-        self.random_iter = 0
 
     def make_proxy_list(self):
         proxy_list = []
@@ -113,15 +123,8 @@ class TestSimplePool:
         server.proxy_list = self.make_proxy_list()
         return server
 
-    def randint(self, a, b):
-        res = a + self.random_iter % (b - a + 1)
-        self.random_iter += 1
-        return res
-
 
 class TestProxyPool:
-    random_iter = 0
-
     async def test_update_proxy_list_initially(self, test_server, loop):
         server = await self.make_server(test_server)
         pool = ProxyPool("http://{}:{}".format(server.host, server.port), loop=loop, pool_size=2)
@@ -156,7 +159,7 @@ class TestProxyPool:
         assert len(pool._trash) == 0
 
     async def test_get_proxy(self, test_server, monkeypatch, loop):
-        monkeypatch.setattr(random, 'random', self.myrandom)
+        monkeypatch.setattr(random, 'random', Random().random)
         server = await self.make_server(test_server)
         pool = ProxyPool("http://{}:{}".format(server.host, server.port), loop=loop, pool_size=2)
         target_list = []
@@ -181,7 +184,6 @@ class TestProxyPool:
                 k = 0
         for i in range(100):
             assert await pool.get_proxy() == target_list[i]
-        self.random_iter = 0
 
     async def test_no_proxy_available(self, test_server, loop):
         server = await self.make_server(test_server)
@@ -331,10 +333,3 @@ class TestProxyPool:
         server = await test_server(app)
         server.proxy_list = self.make_proxy_list()
         return server
-
-    def myrandom(self):
-        res = self.random_iter * 0.1
-        self.random_iter += 1
-        if self.random_iter >= 10:
-            self.random_iter = 0
-        return res

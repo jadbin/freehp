@@ -2,18 +2,16 @@
 
 import sys
 import argparse
-import inspect
 
-from freehp.errors import UsageError
-from freehp.utils.project import walk_modules
-from freehp.commands import Command
+from .errors import UsageError
+from . import commands
+from .commands import Command
 
 
 def _iter_command_classes():
-    for module in walk_modules("freehp.commands"):
-        for obj in vars(module).values():
-            if inspect.isclass(obj) and issubclass(obj, Command) and obj.__module__ == module.__name__:
-                yield obj
+    for obj in vars(commands).values():
+        if isinstance(obj, type) and issubclass(obj, Command) and obj is not Command:
+            yield obj
 
 
 def _get_commands_from_module():
@@ -57,9 +55,9 @@ def main(argv=None):
     parser.usage = "freehp {} {}".format(cmdname, cmd.syntax)
     parser.description = cmd.long_desc
     cmd.add_arguments(parser)
-    args = parser.parse_args(args=argv[1:])
-    cmd.process_arguments(args)
     try:
+        args = parser.parse_args(args=argv[1:])
+        cmd.process_arguments(args)
         cmd.run(args)
     except UsageError as e:
         if str(e):

@@ -10,8 +10,8 @@ import random
 import aiohttp
 import async_timeout
 
-from freehp.errors import NoProxyAvailable
-from freehp.data import PriorityQueue, ProxyInfo
+from .errors import NoProxyAvailable
+from .data import PriorityQueue, ProxyInfo
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class SimpleProxyPool:
           It works when pass the `min_success_rate` parameter.
         update_interval - (optional) Time interval to update the proxy list from proxy agent.
         auth - (optional) Http Basic Auth tuple.
-        params - (optional) Prameters dictionary be sent in the query.
+        params - (optional) Parameters dictionary be sent in the query.
         timeout - (optional) Timeout when connects proxy agent.
         loop - (optional) Event loop.
         """
@@ -124,7 +124,7 @@ class ProxyPool:
         max_fail_times - (optional) The maximum acceptable number of the continuous failure of a proxy.
         update_interval - (optional) Time interval to update the proxy list from proxy agent.
         auth - (optional) Http Basic Auth tuple.
-        params - (optional) Prameters dictionary be sent in the query.
+        params - (optional) Parameters dictionary be sent in the query.
         timeout - (optional) Timeout when connects proxy agent.
         loop - (optional) Event loop.
         """

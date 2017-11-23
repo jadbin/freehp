@@ -2,8 +2,7 @@
 
 from random import randint
 
-from freehp import ProxyPool
-from freehp.errors import NoProxyAvailable
+from freehp import ProxyPool, NoProxyAvailable
 
 if __name__ == '__main__':
     pool = ProxyPool("http://localhost:8081")

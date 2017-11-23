@@ -1,5 +1,10 @@
 # coding=utf-8
 
-from .version import __version__
+from . import _patch
 
-from freehp.pool import SimpleProxyPool, ProxyPool
+from .pool import SimpleProxyPool, ProxyPool
+from .errors import NoProxyAvailable
+
+__all__ = ('SimpleProxyPool', 'ProxyPool', 'NoProxyAvailable')
+
+del _patch

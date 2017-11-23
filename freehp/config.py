@@ -2,6 +2,9 @@
 
 import copy
 from collections import MutableMapping
+import types
+
+from . import defaultconfig
 
 CONFIG_PRIORITIES = {
     "default": 0,
@@ -24,12 +27,10 @@ class ConfigAttribute:
 
     def set(self, value, priority):
         if priority >= self.priority:
-            if isinstance(self.value, BaseConfig):
-                value = BaseConfig(value, priority=priority)
             self.value = value
             self.priority = priority
 
-    def __str__(self):
+    def __repr__(self):
         return "<ConfigAttribute value={self.value!r} priority={self.priority}>".format(self=self)
 
 
@@ -53,7 +54,7 @@ class BaseConfig(MutableMapping):
         v = self.get(name, default)
         try:
             return bool(int(v))
-        except ValueError:
+        except (ValueError, TypeError):
             if v in ("True", "true"):
                 return True
             if v in ("False", "false"):
@@ -64,7 +65,7 @@ class BaseConfig(MutableMapping):
         v = self.get(name, default)
         try:
             return int(v)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
         return None
 
@@ -72,9 +73,19 @@ class BaseConfig(MutableMapping):
         v = self.get(name, default)
         try:
             return float(v)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
         return None
+
+    def getlist(self, name, default=None):
+        v = self.get(name, default)
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v = v.split(",")
+        elif not hasattr(v, "__iter__"):
+            v = [v]
+        return list(v)
 
     def getpriority(self, name):
         if name not in self:
@@ -119,3 +130,14 @@ class BaseConfig(MutableMapping):
 
     def __len__(self):
         return len(self.attributes)
+
+
+class Config(BaseConfig):
+    def __init__(self, values=None, priority="project"):
+        super().__init__()
+        for key in dir(defaultconfig):
+            if not key.startswith("_"):
+                value = getattr(defaultconfig, key)
+                if not isinstance(value, (types.FunctionType, types.ModuleType, type)):
+                    self.set(key.lower(), value, "default")
+        self.update(values, priority)

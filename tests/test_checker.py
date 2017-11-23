@@ -8,16 +8,17 @@ from freehp.checker import HttpbinChecker, ResponseMatchChecker
 
 
 async def make_proxy_server(test_server, loop):
-    async def get_proxies(request):
+    async def process(request):
         async with aiohttp.ClientSession(loop=loop) as session:
-            with async_timeout.timeout(10, loop=loop):
+            with async_timeout.timeout(60, loop=loop):
                 async with session.request("GET", request.raw_path) as resp:
                     body = await resp.read()
-                    return web.Response(body=body,
+                    return web.Response(status=resp.status,
+                                        body=body,
                                         headers=resp.headers)
 
     app = web.Application()
-    app.router.add_route("GET", "/{tail:.*}", get_proxies)
+    app.router.add_route("GET", "/{tail:.*}", process)
     server = await test_server(app)
     return server
 

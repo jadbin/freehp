@@ -12,12 +12,11 @@ import yaml
 from aiohttp import web, ClientSession
 import async_timeout
 
-from freehp.data import ProxyInfo, ProxyDb, PriorityQueue
-from freehp.spider import ProxySpider
-from freehp.utils.project import load_object
-from freehp.utils.config import load_config_file
-from freehp.errors import DownloadingError
-from freehp.config import BaseConfig
+from .data import ProxyInfo, ProxyDb, PriorityQueue
+from .spider import ProxySpider
+from .utils import load_object, load_config_file
+from .errors import DownloadingError
+from .config import BaseConfig
 
 log = logging.getLogger(__name__)
 

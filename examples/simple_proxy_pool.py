@@ -1,7 +1,6 @@
 # coding=utf-8
 
-from freehp import SimpleProxyPool
-from freehp.errors import NoProxyAvailable
+from freehp import SimpleProxyPool, NoProxyAvailable
 
 if __name__ == '__main__':
     pool = SimpleProxyPool("http://localhost:8081")
