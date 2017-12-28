@@ -7,12 +7,12 @@ import asyncio
 import logging
 from asyncio.queues import Queue
 from io import StringIO
-import yaml
 
+import yaml
 from aiohttp import web, ClientSession
 import async_timeout
 
-from .data import ProxyInfo, ProxyDb, PriorityQueue
+from .data import ProxyInfo, ProxyDb
 from .spider import ProxySpider
 from .utils import load_object, load_config_file
 from .errors import DownloadingError
@@ -24,8 +24,7 @@ log = logging.getLogger(__name__)
 class ProxyAgent:
     def __init__(self, config):
         self.config = config
-        self._loop = asyncio.new_event_loop()
-        config.set('loop', self._loop)
+        self.loop = asyncio.new_event_loop()
 
         self._proxy_db = ProxyDb(join(config.get("data_dir"), "freehp-agent.db"))
         self._proxy_db.create_table()
@@ -37,7 +36,8 @@ class ProxyAgent:
         self._block_time = config.getint("block_time")
         self._proxy_queue = ProxyQueue(config.getint("queue_size"), max_fail_times=config.getint("max_fail_times"))
 
-        self._spider = ProxySpider(self._get_spider_config(config.get('spider_config')))
+        self._spider = ProxySpider(self._get_spider_config(config.get('spider_config')),
+                                   loop=self._loop)
 
         self._agent_listen = config.get("agent_listen")
 
@@ -118,8 +118,8 @@ class ProxyAgent:
 
     def _load_checker(self, cls_path):
         checker_cls = load_object(cls_path)
-        if hasattr(checker_cls, "from_config"):
-            checker = checker_cls.from_config(self.config)
+        if hasattr(checker_cls, "from_agent"):
+            checker = checker_cls.from_agent(self)
         else:
             checker = checker_cls()
         return checker

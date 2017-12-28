@@ -30,15 +30,14 @@ def main():
     if sys.version_info < (3, 5):
         raise RuntimeError("Python 3.5+ is required")
     install_requires = [
-        "aiohttp",
-        "pyyaml"
+        "aiohttp>=2.3.2"
     ]
     tests_requires = install_requires + ["pytest", "pytest-aiohttp"]
     setup(
         name="freehp",
         version=read_version(),
         url="https://github.com/jadbin/freehp",
-        description="Free HTTP proxy",
+        description="Providing Free HTTP proxies",
         long_description=long_description,
         author="jadbin",
         author_email="jadbin.com@hotmail.com",

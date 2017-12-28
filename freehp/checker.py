@@ -18,9 +18,9 @@ class HttpbinChecker:
         self._timeout = int(timeout)
 
     @classmethod
-    def from_config(cls, config):
-        c = config.get("httpbin_checker") or {}
-        return cls(loop=config.get("loop"), **c)
+    def from_agent(cls, agent):
+        c = agent.config.get("httpbin_checker") or {}
+        return cls(loop=agent.loop, **c)
 
     async def check_proxy(self, addr):
         if not addr.startswith("http://"):
@@ -63,9 +63,9 @@ class ResponseMatchChecker:
         self._loop = loop or asyncio.get_event_loop()
 
     @classmethod
-    def from_config(cls, config):
-        c = config.get("response_match_checker") or {}
-        return cls(loop=config.get("loop"), **c)
+    def from_agent(cls, agent):
+        c = agent.config.get("response_match_checker") or {}
+        return cls(loop=agent.loop, **c)
 
     async def check_proxy(self, addr):
         if not addr.startswith("http://"):

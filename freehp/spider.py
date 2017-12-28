@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 class ProxySpider:
-    def __init__(self, config):
+    def __init__(self, config, loop=None):
         self._initial_pages = self._pages_from_config(config.get("initial_pages"))
         self._update_pages = self._pages_from_config(config.get("update_pages"))
         self._proxy_finder = ProxyScraperManager.from_config(config)
@@ -19,7 +19,7 @@ class ProxySpider:
         self._timeout = config.getint("spider_timeout")
         self._sleep_time = config.getint("spider_sleep_time")
         self._headers = config.get("spider_headers", {})
-        self._loop = None
+        self._loop = loop or asyncio.get_event_loop()
         self._callback = None
 
     @staticmethod
@@ -76,21 +76,21 @@ class ProxySpider:
             await self._update_proxy(urls)
 
     async def _update_proxy(self, urls):
-        for u in urls:
+        for url in urls:
             retry_cnt = 3
             while retry_cnt > 0:
                 retry_cnt -= 1
                 try:
                     async with aiohttp.ClientSession(loop=self._loop) as session:
                         with async_timeout.timeout(self._timeout, loop=self._loop):
-                            async with session.request("GET", u, headers=self._headers) as resp:
-                                url = str(resp.url)
+                            async with session.request("GET", url, headers=self._headers) as resp:
+                                resp_url = str(resp.url)
                                 body = await resp.read()
                 except Exception as e:
                     log.info("{} error occurred when update proxy on url={}: {}".format(type(e), u, e))
                 else:
                     retry_cnt = 0
-                    addr_list = self._proxy_finder.find_proxy(url, body)
+                    addr_list = self._proxy_finder.find_proxy(resp_url, body)
                     log.debug("Find {} proxies on the page '{}'".format(len(addr_list), u))
                     if addr_list:
                         await self._callback(*addr_list)

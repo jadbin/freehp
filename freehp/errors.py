@@ -11,12 +11,6 @@ class UsageError(Exception):
         super().__init__(*args, **kwargs)
 
 
-class NoProxyAvailable(Exception):
-    """
-    No proxy available.
-    """
-
-
 class DownloadingError(Exception):
     """
     Unable to download.
