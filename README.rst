@@ -9,9 +9,8 @@ FreeHP
 Key Features
 ============
 
-- Provides proxy agent (server) to scrap free HTTP proxies and verify the usability of each of them.
-- Provides proxy pool (client) to collect the proxies from agent and maintains them locally.
-
+- Provides proxy agent (server side) to scrap free HTTP proxies and verify the usability of each of them.
+- Provides proxy pool (client side) to collect the proxies from agent and maintains them locally.
 
 Installation
 ============
@@ -27,7 +26,6 @@ Use source code:
 .. code-block:: bash
 
     $ python setup.py install
-
 
 Getting Started
 ===============
@@ -47,7 +45,7 @@ Then we can visit http://localhost:8081/ and see a list of latest available prox
 Proxy Pool
 ----------
 
-An usage example of ``SimpleProxyPool``:
+A usage example of ``SimpleProxyPool``:
 
 .. code-block:: python
 
@@ -63,7 +61,7 @@ An usage example of ``SimpleProxyPool``:
 
 ``SimpleProxyPool`` randomly selects the proxy in the list each time.
 
-An usage example of ``ProxyPool``:
+A usage example of ``ProxyPool``:
 
 .. code-block:: python
 
@@ -88,6 +86,11 @@ An usage example of ``ProxyPool``:
             pool.feed_back(proxy, ok)
 
 ``ProxyPool`` prefers to select the proxy with high connection success rate.
+
+Documentation
+=============
+
+http://freehp.readthedocs.io/
 
 Requirements
 ============
