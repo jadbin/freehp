@@ -22,6 +22,9 @@ class ProxySpider:
         self._loop = loop or asyncio.get_event_loop()
         self._callback = None
 
+        self._futures = []
+        self._receivers = []
+
     @staticmethod
     def _pages_from_config(config):
         def _get_pages(**kw):
@@ -57,17 +60,22 @@ class ProxySpider:
                     res.append(j)
         return res
 
-    def bind(self, loop, callback):
-        self._loop = loop
-        self._callback = callback
+    def subscribe(self, receiver):
+        self._receivers.append(receiver)
+
+    def open(self):
         for urls in self._initial_pages:
             if not urls:
                 continue
-            asyncio.ensure_future(self._update_proxy(urls), loop=self._loop)
+            self._futures.append(asyncio.ensure_future(self._update_proxy(urls), loop=self._loop))
         for urls in self._update_pages:
             if not urls:
                 continue
-            asyncio.ensure_future(self._update_proxy_regularly(urls), loop=self._loop)
+            self._futures.append(asyncio.ensure_future(self._update_proxy_regularly(urls), loop=self._loop))
+
+    def close(self):
+        for f in self._futures:
+            f.cancel()
 
     async def _update_proxy_regularly(self, urls):
         sleep_time = self._update_time

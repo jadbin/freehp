@@ -5,7 +5,6 @@ from os.path import abspath, isfile
 
 from .config import Config
 from .errors import UsageError
-from .agent import ProxyAgent
 from .utils import load_config_file, configure_logging
 from .version import __version__
 

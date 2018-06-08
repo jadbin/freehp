@@ -11,7 +11,7 @@ class UsageError(Exception):
         super().__init__(*args, **kwargs)
 
 
-class DownloadingError(Exception):
+class NetworkError(Exception):
     """
-    Unable to download.
+    Network error.
     """
