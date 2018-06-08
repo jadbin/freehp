@@ -5,17 +5,12 @@ import time
 import asyncio
 import logging
 from asyncio.queues import Queue
-from io import StringIO
 from collections import deque
 
-import yaml
-from aiohttp import web, ClientSession
-import async_timeout
+from aiohttp import web
 
 from .spider import ProxySpider
-from .utils import load_object, load_config_file
-from .errors import NetworkError
-from .config import BaseConfig
+from .utils import load_object
 
 log = logging.getLogger(__name__)
 
@@ -27,15 +22,14 @@ class ProxyManager:
 
         self._checker = self._load_checker(config.get("checker_cls"))
         self._checker_clients = config.getint("checker_clients")
-
         self._check_interval = config.getint("check_interval")
         self._block_time = config.getint("block_time")
         self._proxy_queue = ProxyQueue(max_fail_times=config.getint("max_fail_times"))
-
-        self._spider = ProxySpider(self._get_spider_config(config.get('spider_config')),
-                                   loop=self.loop)
-
+        self._spider = ProxySpider.from_manager(self)
+        self._spider.subscribe(self._add_proxy)
         self._listen = config.get("listen")
+
+        self._proxy_db = {}
 
         self._futures = []
         self._wait_queue = Queue(loop=self.loop)
@@ -47,7 +41,6 @@ class ProxyManager:
             asyncio.set_event_loop(self.loop)
             self._init_server()
             self._init_checker()
-            self._init_spider()
             try:
                 self.loop.run_forever()
             except Exception:
@@ -60,7 +53,7 @@ class ProxyManager:
         pass
 
     def _init_server(self):
-        log.info("Start manager on '{}'".format(self._listen))
+        log.info("Listen on '{}'".format(self._listen))
         app = web.Application(logger=log, loop=self.loop)
         app.router.add_route("GET", "/", self.get_proxies)
         host, port = self._listen.split(":")
@@ -68,62 +61,36 @@ class ProxyManager:
         self.loop.run_until_complete(
             self.loop.create_server(app.make_handler(access_log=None, loop=self.loop), host, port))
 
-    def _get_spider_config(self, config_path):
-        if config_path.startswith("http://") or config_path.startswith("https://"):
-            config = self.loop.run_until_complete(self._download_spider_config(config_path))
-            if config is None:
-                raise NetworkError("Unable to get the configuration of spider: {}".format(config_path))
-        else:
-            config = load_config_file(config_path)
-        return BaseConfig(config)
-
-    async def _download_spider_config(self, url):
-        try:
-            async with ClientSession(loop=self.loop) as session:
-                with async_timeout.timeout(20, loop=self.loop):
-                    async with session.request("GET", url) as resp:
-                        if resp.status / 100 != 2:
-                            log.error("Failed to download spider configuration")
-                        else:
-                            body = await resp.read()
-                            return yaml.load(StringIO(body.decode('utf-8')))
-        except Exception:
-            log.error("Unexpected error occurred when download spider configuration", exc_info=True)
-
-    def _init_spider(self):
-        log.info("Initialize spider")
-        self._spider.bind(self._loop, self._add_proxy)
-
-    async def _add_proxy(self, *addr_list):
+    async def _add_proxy(self, proxies):
         t = int(time.time())
-        for addr in addr_list:
+        for p in proxies:
             try:
-                proxy = self._proxy_db.find_proxy(addr)
+                proxy = self._proxy_db.get(p)
                 if proxy and t - proxy.timestamp <= self._block_time:
                     continue
-                proxy = AgentProxyInfo(addr, t)
-                self._proxy_db.update_timestamp(proxy)
+                proxy = ProxyInfo(p, t)
+                self._proxy_db[p] = proxy
                 await self._wait_queue.put(proxy)
             except Exception:
-                log.warning("Unexpected error occurred when add proxy '{0}'".format(addr), exc_info=True)
+                log.warning("Unexpected error occurred when add proxy '{0}'".format(p), exc_info=True)
 
     def _init_checker(self):
         log.info("Initialize checker, clients={}".format(self._checker_clients))
-        f = asyncio.ensure_future(self._find_expired_proxy(), loop=self._loop)
+        f = asyncio.ensure_future(self._find_expired_proxy_task(), loop=self.loop)
         self._futures.append(f)
         for i in range(self._checker_clients):
-            f = asyncio.ensure_future(self._check_proxy(), loop=self._loop)
+            f = asyncio.ensure_future(self._check_proxy_task(), loop=self.loop)
             self._futures.append(f)
 
     def _load_checker(self, cls_path):
         checker_cls = load_object(cls_path)
-        if hasattr(checker_cls, "from_agent"):
-            checker = checker_cls.from_agent(self)
+        if hasattr(checker_cls, "from_manager"):
+            checker = checker_cls.from_manager(self)
         else:
             checker = checker_cls()
         return checker
 
-    async def _find_expired_proxy(self):
+    async def _find_expired_proxy_task(self):
         while True:
             proxy = self._proxy_queue.get_expired_proxy()
             if proxy is not None:
@@ -131,13 +98,12 @@ class ProxyManager:
             else:
                 await asyncio.sleep(5, loop=self.loop)
 
-    async def _check_proxy(self):
+    async def _check_proxy_task(self):
         while True:
             proxy = await self._wait_queue.get()
             ok = await self._checker.check_proxy(proxy.addr)
             t = int(time.time())
             proxy.timestamp = t + self._check_interval
-            self._proxy_db.update_timestamp(proxy)
             self._proxy_queue.feed_back(proxy, ok)
 
     async def get_proxies(self, request):

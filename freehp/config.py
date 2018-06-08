@@ -4,7 +4,7 @@ import copy
 from collections import MutableMapping
 import types
 
-from . import defaultconfig
+from freehp import defaultconfig
 
 CONFIG_PRIORITIES = {
     "default": 0,

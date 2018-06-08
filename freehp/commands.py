@@ -3,10 +3,11 @@
 import logging
 from os.path import abspath, isfile
 
-from .config import Config
-from .errors import UsageError
-from .utils import load_config_file, configure_logging
-from .version import __version__
+from freehp.config import Config
+from freehp.errors import UsageError
+from freehp.utils import load_config, configure_logging
+from freehp.version import __version__
+from freehp.manager import ProxyManager
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class Command:
 class RunCommand(Command):
     @property
     def syntax(self):
-        return "[config_file]"
+        return "[config]"
 
     @property
     def name(self):
@@ -69,7 +70,7 @@ class RunCommand(Command):
     def add_arguments(self, parser):
         Command.add_arguments(self, parser)
 
-        parser.add_argument("config_file", metavar="config_file", nargs="?", help="configuration file")
+        parser.add_argument("config", metavar="config_file", nargs="?", help="configuration file")
 
     def process_arguments(self, args):
         Command.process_arguments(self, args)
@@ -77,14 +78,14 @@ class RunCommand(Command):
     def run(self, args):
         if args.config_file:
             if isfile(args.config_file):
-                for k, v in load_config_file(args.config_file).items():
+                for k, v in load_config(args.config_file).items():
                     self.config.set(k, v, priority="project")
             else:
                 self.exitcode = 1
                 print("Error: Connot find '{}'".format(abspath(args.config_file)))
                 return
         configure_logging('freehp', self.config)
-        agent = ProxyAgent(self.config)
+        agent = ProxyManager(self.config)
         agent.start()
 
 

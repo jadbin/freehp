@@ -3,9 +3,9 @@
 import sys
 import argparse
 
-from .errors import UsageError
-from . import commands
-from .commands import Command
+from freehp.errors import UsageError
+from freehp import commands
+from freehp.commands import Command
 
 
 def _iter_command_classes():

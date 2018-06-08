@@ -1,15 +1,9 @@
 # coding=utf-8
 
+from os.path import isfile
+
 import logging
 from importlib import import_module
-
-import yaml
-
-
-def load_config_file(file):
-    with open(file, "r", encoding="utf-8") as f:
-        d = yaml.load(f)
-        return d
 
 
 def load_object(path):
@@ -19,6 +13,21 @@ def load_object(path):
         mod = import_module(module)
         return getattr(mod, name)
     return path
+
+
+def load_config(fname):
+    if fname is None or not isfile(fname):
+        raise ValueError('{} is not a file'.format(fname))
+    code = compile(open(fname, 'rb').read(), fname, 'exec')
+    cfg = {
+        "__builtins__": __builtins__,
+        "__name__": "__config__",
+        "__file__": fname,
+        "__doc__": None,
+        "__package__": None
+    }
+    exec(code, cfg, cfg)
+    return cfg
 
 
 def configure_logging(name, config):
