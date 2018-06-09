@@ -51,9 +51,8 @@ class ProxySpider:
         while True:
             t = await self._update_proxy(urls)
             t = self._scrap_interval - t
-            if t < self._sleep_time:
-                self._sleep_time = t
-            await asyncio.sleep(t, loop=self._loop)
+            if t > self._sleep_time:
+                await asyncio.sleep(t, loop=self._loop)
 
     async def _update_proxy(self, urls):
         start_time = time.time()
