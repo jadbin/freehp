@@ -59,7 +59,7 @@ def main():
             "Programming Language :: Python :: 3",
             "Programming Language :: Python :: 3.5",
             "Topic :: Internet :: WWW/HTTP"
-        ],
+        ]
     )
 
 

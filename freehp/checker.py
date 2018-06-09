@@ -4,6 +4,7 @@ import json
 import random
 import asyncio
 import logging
+from asyncio import CancelledError
 
 import aiohttp
 import async_timeout
@@ -36,7 +37,9 @@ class HttpbinChecker:
                         data = json.loads(body.decode('utf-8'))
                         if data.get('args', {}).get('seed') != seed:
                             return False
+        except CancelledError:
+            raise
         except Exception:
             return False
-        log.debug("Proxy {} is OK".format(addr))
+        log.debug("Proxy %s is OK", addr)
         return True

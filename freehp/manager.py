@@ -6,11 +6,13 @@ import asyncio
 import logging
 from asyncio.queues import Queue
 from collections import deque
+import signal
+from asyncio import CancelledError
 
 from aiohttp import web
 
-from .spider import ProxySpider
-from .utils import load_object
+from freehp.spider import ProxySpider
+from freehp.utils import load_object
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class ProxyManager:
 
         self._proxy_db = {}
 
-        self._futures = []
+        self._futures = None
         self._wait_queue = Queue(loop=self.loop)
         self._is_running = False
 
@@ -39,8 +41,14 @@ class ProxyManager:
         if not self._is_running:
             self._is_running = True
             asyncio.set_event_loop(self.loop)
+            self._futures = []
             self._init_server()
             self._init_checker()
+            self._spider.open()
+            self.loop.add_signal_handler(signal.SIGINT,
+                                         lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
+            self.loop.add_signal_handler(signal.SIGTERM,
+                                         lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
             try:
                 self.loop.run_forever()
             except Exception:
@@ -50,10 +58,20 @@ class ProxyManager:
                 self.loop.close()
 
     async def shutdown(self):
-        pass
+        if not self._is_running:
+            return
+        self._is_running = False
+        log.info("Shutdown now")
+        self._spider.close()
+        if self._futures:
+            for f in self._futures:
+                f.cancel()
+            self._futures = None
+        await asyncio.sleep(0.001, loop=self.loop)
+        self.loop.stop()
 
     def _init_server(self):
-        log.info("Listen on '{}'".format(self._listen))
+        log.info("Listen on '%s'", self._listen)
         app = web.Application(logger=log, loop=self.loop)
         app.router.add_route("GET", "/", self.get_proxies)
         host, port = self._listen.split(":")
@@ -71,11 +89,13 @@ class ProxyManager:
                 proxy = ProxyInfo(p, t)
                 self._proxy_db[p] = proxy
                 await self._wait_queue.put(proxy)
+            except CancelledError:
+                raise
             except Exception:
-                log.warning("Unexpected error occurred when add proxy '{0}'".format(p), exc_info=True)
+                log.warning("Unexpected error occurred when add proxy '%s'", p, exc_info=True)
 
     def _init_checker(self):
-        log.info("Initialize checker, clients={}".format(self._checker_clients))
+        log.info("Initialize checker, clients=%s", self._checker_clients)
         f = asyncio.ensure_future(self._find_expired_proxy_task(), loop=self.loop)
         self._futures.append(f)
         for i in range(self._checker_clients):
@@ -107,12 +127,12 @@ class ProxyManager:
             self._proxy_queue.feed_back(proxy, ok)
 
     async def get_proxies(self, request):
-        params = request.GET
+        params = request.rel_url.query
         count = params.get("count", 0)
         if count:
             count = int(count)
         detail = "detail" in params
-        log.info("GET '/', count={}, detail={}".format(count, detail))
+        log.info("GET '/', count=%s, detail=%s", count, detail)
         proxy_list = self._get_proxies(count, detail=detail)
         return web.Response(body=json.dumps(proxy_list).encode("utf-8"),
                             charset="utf-8",

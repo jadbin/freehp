@@ -70,19 +70,19 @@ class RunCommand(Command):
     def add_arguments(self, parser):
         Command.add_arguments(self, parser)
 
-        parser.add_argument("config", metavar="config_file", nargs="?", help="configuration file")
+        parser.add_argument("config", metavar="config", nargs="?", help="configuration file")
 
     def process_arguments(self, args):
         Command.process_arguments(self, args)
 
     def run(self, args):
-        if args.config_file:
-            if isfile(args.config_file):
-                for k, v in load_config(args.config_file).items():
+        if args.config:
+            if isfile(args.config):
+                for k, v in load_config(args.config).items():
                     self.config.set(k, v, priority="project")
             else:
                 self.exitcode = 1
-                print("Error: Connot find '{}'".format(abspath(args.config_file)))
+                print("Error: Cannot find '{}'".format(abspath(args.config)))
                 return
         configure_logging('freehp', self.config)
         agent = ProxyManager(self.config)

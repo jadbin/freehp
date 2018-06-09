@@ -1,5 +1,7 @@
 include README.rst
 include LICENSE
-recursive-include freehp/config *
-recursive-include docs *.rst *.py
-recursive-include tests *.py
+graft freehp
+graft conf
+graft tests
+global-exclude *.pyc
+global-exclude *.pyo
