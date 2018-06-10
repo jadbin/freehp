@@ -101,6 +101,8 @@ class ProxyManager:
         for i in range(self._checker_clients):
             f = asyncio.ensure_future(self._check_proxy_task(), loop=self.loop)
             self._futures.append(f)
+        f = asyncio.ensure_future(self._remove_blocked_proxy_task(), loop=self.loop)
+        self._futures.append(f)
 
     def _load_checker(self, cls_path):
         checker_cls = load_object(cls_path)
@@ -125,6 +127,14 @@ class ProxyManager:
             t = int(time.time())
             proxy.timestamp = t + self._check_interval
             self._proxy_queue.feed_back(proxy, ok)
+
+    async def _remove_blocked_proxy_task(self):
+        while True:
+            await asyncio.sleep(self._block_time, loop=self.loop)
+            t = time.time()
+            for i in list(self._proxy_db.keys()):
+                if t - self._proxy_db[i].timestamp > self._block_time:
+                    del self._proxy_db[i]
 
     async def get_proxies(self, request):
         params = request.rel_url.query
