@@ -6,7 +6,6 @@ proxy_pages = {
     '66ip': 'http://www.66ip.cn/mo.php?tqsl=1000',
     'kuaidaili': ['https://www.kuaidaili.com/free/inha/{}/'.format(i) for i in range(5, 0, -1)]
                  + ['https://www.kuaidaili.com/free/intr/{}/'.format(i) for i in range(5, 0, -1)],
-    'cn-proxy': 'http://cn-proxy.com/',
     'data5u': ['http://www.data5u.com/free/gngn/index.shtml',
                'http://www.data5u.com/free/gnpt/index.shtml',
                'http://www.data5u.com/free/gwgn/index.shtml',

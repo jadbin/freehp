@@ -7,7 +7,7 @@ log_dateformat = '%Y-%m-%d %H:%M:%S'
 
 daemon = False
 
-listen = '0.0.0.0:6256'
+bind = '0.0.0.0:6256'
 
 block_time = 7200
 max_fail_times = 2

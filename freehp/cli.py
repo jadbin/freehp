@@ -51,9 +51,9 @@ def main(argv=None):
         sys.exit(2)
     del argv[1]
     cmd = cmds[cmdname]
-    parser = argparse.ArgumentParser()
-    parser.usage = "freehp {} {}".format(cmdname, cmd.syntax)
-    parser.description = cmd.long_desc
+    parser = argparse.ArgumentParser(usage="freehp {} {}".format(cmdname, cmd.syntax),
+                                     description=cmd.long_desc,
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     cmd.add_arguments(parser)
     try:
         args = parser.parse_args(args=argv[1:])

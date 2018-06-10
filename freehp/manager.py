@@ -23,13 +23,10 @@ class ProxyManager:
         self.loop = asyncio.new_event_loop()
 
         self._checker = self._load_checker(config.get("checker_cls"))
-        self._checker_clients = config.getint("checker_clients")
-        self._check_interval = config.getint("check_interval")
         self._block_time = config.getint("block_time")
         self._proxy_queue = ProxyQueue(max_fail_times=config.getint("max_fail_times"))
         self._spider = ProxySpider.from_manager(self)
         self._spider.subscribe(self._add_proxy)
-        self._listen = config.get("listen")
 
         self._proxy_db = {}
 
@@ -54,8 +51,6 @@ class ProxyManager:
             except Exception:
                 log.error("Unexpected error occurred when run loop", exc_info=True)
                 raise
-            finally:
-                self.loop.close()
 
     async def shutdown(self):
         if not self._is_running:
@@ -71,10 +66,11 @@ class ProxyManager:
         self.loop.stop()
 
     def _init_server(self):
-        log.info("Listen on '%s'", self._listen)
+        bind = self.config.get('bind')
+        log.info("Bind to '%s'", bind)
         app = web.Application(logger=log, loop=self.loop)
         app.router.add_route("GET", "/", self.get_proxies)
-        host, port = self._listen.split(":")
+        host, port = bind.split(":")
         port = int(port)
         self.loop.run_until_complete(
             self.loop.create_server(app.make_handler(access_log=None, loop=self.loop), host, port))
@@ -95,10 +91,11 @@ class ProxyManager:
                 log.warning("Unexpected error occurred when add proxy '%s'", p, exc_info=True)
 
     def _init_checker(self):
-        log.info("Initialize checker, clients=%s", self._checker_clients)
+        checker_clients = self.config.getint('checker_clients')
+        log.info("Initialize checker, clients=%s", checker_clients)
         f = asyncio.ensure_future(self._find_expired_proxy_task(), loop=self.loop)
         self._futures.append(f)
-        for i in range(self._checker_clients):
+        for i in range(checker_clients):
             f = asyncio.ensure_future(self._check_proxy_task(), loop=self.loop)
             self._futures.append(f)
         f = asyncio.ensure_future(self._remove_blocked_proxy_task(), loop=self.loop)
@@ -121,11 +118,12 @@ class ProxyManager:
                 await asyncio.sleep(5, loop=self.loop)
 
     async def _check_proxy_task(self):
+        check_interval = self.config.get('check_interval')
         while True:
             proxy = await self._wait_queue.get()
             ok = await self._checker.check_proxy(proxy.addr)
             t = int(time.time())
-            proxy.timestamp = t + self._check_interval
+            proxy.timestamp = t + check_interval
             self._proxy_queue.feed_back(proxy, ok)
 
     async def _remove_blocked_proxy_task(self):
