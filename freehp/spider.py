@@ -73,8 +73,6 @@ class ProxySpider:
                 else:
                     retry_cnt = 0
                     proxies = extract_proxies(body)
-                    if len(proxies) == 0:
-                        log.debug("%s", body)
                     log.debug("Find %s proxies on the page '%s'", len(proxies), url)
                     if proxies:
                         for r in self._receivers:

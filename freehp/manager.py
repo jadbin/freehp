@@ -140,18 +140,27 @@ class ProxyManager:
         if count:
             count = int(count)
         detail = "detail" in params
-        log.info("GET '/', count=%s, detail=%s", count, detail)
-        proxy_list = self._get_proxies(count, detail=detail)
+        order = params.get('order', 'rate')
+        log.info("GET '/', count=%s, detail=%s, order=%s", count, detail, order)
+        proxy_list = self._get_proxies(count, detail=detail, order=order)
         return web.Response(body=json.dumps(proxy_list).encode("utf-8"),
                             charset="utf-8",
                             content_type="application/json")
 
-    def _get_proxies(self, count, detail=False):
-        t = self._proxy_queue.get_proxies(count)
+    def _get_proxies(self, count, detail=False, order='rate'):
+        t = self._proxy_queue.get_proxies()
+        if count <= 0 or len(t) < count:
+            count = len(t)
+        if order == 'rate':
+            t.sort(key=lambda k: k.rate, reverse=True)
+        elif order == 'time':
+            t.sort(key=lambda k: k.timestamp, reverse=True)
+        t = t[:count]
+
         res = []
         for p in t:
             if detail:
-                res.append({"addr": p.addr, "success": p.good, "fail": p.bad})
+                res.append({"addr": p.addr, "success": p.good, "fail": p.bad, "timestamp": p.timestamp})
             else:
                 res.append(p.addr)
         return res
@@ -163,13 +172,9 @@ class ProxyQueue:
         self._queue = deque()
         self._backup = deque()
 
-    def get_proxies(self, count):
-        total = len(self._queue)
-        if count <= 0 or total < count:
-            count = total
+    def get_proxies(self):
         res = [i for i in self._queue]
-        res.sort(key=lambda k: k.rate, reverse=True)
-        return res[:count]
+        return res
 
     def add_proxy(self, proxy):
         if proxy.fail == 0:
