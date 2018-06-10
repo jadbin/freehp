@@ -38,17 +38,19 @@ class Command:
                             help="set/override setting (may be repeated)")
         parser.add_argument("-l", "--log-level", dest="log_level", metavar="LEVEL",
                             help="log level")
+        parser.add_argument("--log-file", dest="log_file", metavar="FILE",
+                            help="log file")
 
     def process_arguments(self, args):
-        # setting
         try:
             self.config.update(dict(x.split("=", 1) for x in args.set), priority="cmdline")
         except ValueError:
             raise UsageError("Invalid -s value, use -s NAME=VALUE", print_help=False)
 
-        # logger
         if args.log_level:
             self.config.set("log_level", args.log_level, priority="cmdline")
+        if args.log_file:
+            self.config.set('log_file', args.log_file, priority='cmdline')
 
     def run(self, args):
         raise NotImplementedError
