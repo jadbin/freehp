@@ -69,7 +69,8 @@ class RunCommand(Command):
 
     def add_arguments(self, parser):
         parser.add_argument('-c', '--config', metavar='FILE', help='configuration file')
-        parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', help='run in daemon mode')
+        parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', default=False,
+                            help='run in daemon mode')
 
         super().add_arguments(parser)
 
@@ -83,7 +84,7 @@ class RunCommand(Command):
                 self.exitcode = 1
                 print("Error: Cannot find '{}'".format(abspath(args.config)))
                 return
-        if args.daemon is not None:
+        if args.daemon:
             self.config.set('daemon', True, priority='cmdline')
 
     def run(self, args):
@@ -104,7 +105,10 @@ class VersionCommand(Command):
         return "Print the version"
 
     def add_arguments(self, parser):
-        super().add_arguments(parser)
+        pass
+
+    def process_arguments(self, args):
+        pass
 
     def run(self, args):
         print("freehp version {0}".format(__version__))
