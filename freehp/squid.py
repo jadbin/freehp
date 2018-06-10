@@ -112,5 +112,5 @@ class Squid:
                 raise RuntimeError('Error occurred when reconfigure squid')
         except RuntimeError:
             with open(self._dest_file, 'w') as f:
-                f.writelines(self._template)
+                f.write(self._template)
             raise
