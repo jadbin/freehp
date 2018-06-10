@@ -1,14 +1,13 @@
 # coding=utf-8
 
 log_file = None
-log_encoding = 'utf-8'
 log_level = 'INFO'
-log_format = '%(asctime)s %(name)s [%(levelname)s]: %(message)s'
+log_format = '%(asctime)s %(name)s [%(levelname)s] %(message)s'
 log_dateformat = '%Y-%m-%d %H:%M:%S'
 
-listen = '0.0.0.0:6256'
+daemon = False
 
-spider_config = None
+listen = '0.0.0.0:6256'
 
 block_time = 7200
 max_fail_times = 2
@@ -27,3 +26,4 @@ spider_headers = {
     'Accept-Encoding': 'gzip, deflate, sdch',
     'Accept-Language': 'zh-CN,zh;q=0.8'
 }
+proxy_pages = None

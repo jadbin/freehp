@@ -1,5 +1,6 @@
 # coding=utf-8
 
+import os
 from os.path import isfile
 
 import logging
@@ -45,3 +46,18 @@ def configure_logging(name, config):
     formatter = logging.Formatter(log_format, log_dateformat)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+
+def be_daemon():
+    if os.fork():
+        os._exit(0)
+    os.setsid()
+    if os.fork():
+        os._exit(0)
+    os.umask(0o22)
+    os.closerange(0, 3)
+    fd_null = os.open(os.devnull, os.O_RDWR)
+    if fd_null != 0:
+        os.dup2(fd_null, 0)
+    os.dup2(fd_null, 1)
+    os.dup2(fd_null, 2)

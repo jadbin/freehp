@@ -5,7 +5,7 @@ from os.path import abspath, isfile
 
 from freehp.config import Config
 from freehp.errors import UsageError
-from freehp.utils import load_config, configure_logging
+from freehp import utils
 from freehp.version import __version__
 from freehp.manager import ProxyManager
 
@@ -68,23 +68,28 @@ class RunCommand(Command):
         return "Run spider to scrap free HTTP proxies"
 
     def add_arguments(self, parser):
-        Command.add_arguments(self, parser)
+        parser.add_argument('-c', '--config', metavar='FILE', help='configuration file')
+        parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', help='run in daemon mode')
 
-        parser.add_argument("config", metavar="config", nargs="?", help="configuration file")
+        super().add_arguments(parser)
 
     def process_arguments(self, args):
-        Command.process_arguments(self, args)
-
-    def run(self, args):
+        super().process_arguments(args)
         if args.config:
             if isfile(args.config):
-                for k, v in load_config(args.config).items():
+                for k, v in utils.load_config(args.config).items():
                     self.config.set(k, v, priority="project")
             else:
                 self.exitcode = 1
                 print("Error: Cannot find '{}'".format(abspath(args.config)))
                 return
-        configure_logging('freehp', self.config)
+        if args.daemon is not None:
+            self.config.set('daemon', True, priority='cmdline')
+
+    def run(self, args):
+        if self.config.getbool('daemon'):
+            utils.be_daemon()
+        utils.configure_logging('freehp', self.config)
         agent = ProxyManager(self.config)
         agent.start()
 
@@ -99,7 +104,7 @@ class VersionCommand(Command):
         return "Print the version"
 
     def add_arguments(self, parser):
-        Command.add_arguments(self, parser)
+        super().add_arguments(parser)
 
     def run(self, args):
         print("freehp version {0}".format(__version__))
