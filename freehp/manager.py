@@ -69,7 +69,7 @@ class ProxyManager:
         bind = self.config.get('bind')
         log.info("Bind to '%s'", bind)
         app = web.Application(logger=log, loop=self.loop)
-        app.router.add_route("GET", "/", self.get_proxies)
+        app.router.add_route("GET", "/proxies", self.get_proxies)
         host, port = bind.split(":")
         port = int(port)
         self.loop.run_until_complete(
