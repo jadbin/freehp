@@ -37,6 +37,9 @@ class Squid:
             self._freehp_address = freehp_address
         else:
             self._freehp_address = 'http://' + freehp_address
+        if not self._freehp_address.endswith('/'):
+            self._freehp_address += '/'
+        self._freehp_address += 'proxies'
         if max_num > 0:
             self._freehp_address = '{}?count={}'.format(self._freehp_address, max_num)
         self._future = None
