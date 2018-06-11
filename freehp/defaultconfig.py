@@ -11,6 +11,7 @@ bind = '0.0.0.0:6256'
 
 block_time = 7200
 max_fail_times = 2
+min_anonymity = 0
 
 check_interval = 300
 checker_cls = 'freehp.checker.HttpbinChecker'

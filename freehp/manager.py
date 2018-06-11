@@ -13,6 +13,7 @@ from aiohttp import web
 
 from freehp.spider import ProxySpider
 from freehp.utils import load_object
+from freehp import defaultconfig
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ class ProxyManager:
 
         self._checker = self._load_checker(config.get("checker_cls"))
         self._block_time = config.getint("block_time")
-        self._proxy_queue = ProxyQueue(max_fail_times=config.getint("max_fail_times"))
+        self._proxy_queue = ProxyQueue(max_fail_times=config.getint("max_fail_times"),
+                                       min_anonymity=config.getint('min_anonymity'))
         self._spider = ProxySpider.from_manager(self)
         self._spider.subscribe(self._add_proxy)
 
@@ -121,10 +123,10 @@ class ProxyManager:
         check_interval = self.config.get('check_interval')
         while True:
             proxy = await self._wait_queue.get()
-            ok = await self._checker.check_proxy(proxy.addr)
+            res = await self._checker.check_proxy(proxy.addr)
             t = int(time.time())
             proxy.timestamp = t + check_interval
-            self._proxy_queue.feed_back(proxy, ok)
+            self._proxy_queue.feed_back(proxy, res)
 
     async def _remove_blocked_proxy_task(self):
         while True:
@@ -160,15 +162,17 @@ class ProxyManager:
         res = []
         for p in t:
             if detail:
-                res.append({"addr": p.addr, "success": p.good, "fail": p.bad, "timestamp": p.timestamp})
+                res.append({"address": p.addr, "success": p.good, "fail": p.bad, "timestamp": p.timestamp,
+                            'anonymity': p.anonymity})
             else:
                 res.append(p.addr)
         return res
 
 
 class ProxyQueue:
-    def __init__(self, max_fail_times=2):
+    def __init__(self, max_fail_times=defaultconfig.max_fail_times, min_anonymity=defaultconfig.min_anonymity):
         self._max_fail_times = max_fail_times
+        self._min_anonymity = min_anonymity
         self._queue = deque()
         self._backup = deque()
 
@@ -182,7 +186,13 @@ class ProxyQueue:
         else:
             self._backup.append(proxy)
 
-    def feed_back(self, proxy, ok):
+    def feed_back(self, proxy, res):
+        ok = False
+        if res:
+            anonymity = res[1]
+            proxy.anonymity = anonymity
+            if anonymity >= self._min_anonymity:
+                ok = True
         if ok:
             proxy.good += 1
             proxy.fail = 0
@@ -216,12 +226,13 @@ class ProxyQueue:
 
 
 class ProxyInfo:
-    def __init__(self, addr, timestamp, *, good=0, bad=0, fail=1):
+    def __init__(self, addr, timestamp, *, good=0, bad=0, fail=1, anonymity=0):
         self.addr = addr
         self.timestamp = timestamp
         self.good = good
         self.bad = bad
         self.fail = fail
+        self.anonymity = anonymity
 
     @property
     def rate(self):

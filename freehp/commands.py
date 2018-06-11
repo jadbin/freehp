@@ -68,6 +68,9 @@ class RunCommand(Command):
                             help="log level")
         parser.add_argument("--log-file", dest="log_file", metavar="FILE", default=defaultconfig.log_file,
                             help="log file")
+        parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
+                            default=defaultconfig.min_anonymity,
+                            help='minimal anonymity, 0: transparent, 1: anonymous, 2: elite proxy')
         parser.add_argument("-s", "--set", dest="set", action="append", default=[], metavar="NAME=VALUE",
                             help="set/override setting (may be repeated)")
 
@@ -88,6 +91,8 @@ class RunCommand(Command):
             self.config.set("log_level", args.log_level)
         if args.log_file:
             self.config.set('log_file', args.log_file)
+        if args.min_anonymity:
+            self.config.set('min_anonymity', args.min_anonymity)
         try:
             self.config.update(dict(x.split("=", 1) for x in args.set))
         except ValueError:
