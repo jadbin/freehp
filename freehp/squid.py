@@ -87,12 +87,12 @@ class Squid:
                     async with session.request("GET", self._freehp_address) as resp:
                         body = await resp.read()
                         data = json.loads(body.decode('utf-8'))
+                        log.debug('Get %s proxies', len(data))
         except CancelledError:
             raise
         except Exception:
             log.error("Error occurred when get proxies from '%s'", self._freehp_address, exc_info=True)
 
-        log.debug('Get %s proxies', len(data))
         if len(data) > 0:
             try:
                 self._reconfigure_squid(data)
@@ -106,10 +106,10 @@ class Squid:
             lines.append(PEER_CONF.format(host, port, host + '.' + port))
         with open(self._dest_file, 'w') as f:
             f.writelines(lines)
-
+        log.info('Reconfigure squid with %s proxies, conf=%s', len(proxies), self._dest_file)
         try:
             if os.system('{} -k reconfigure'.format(self._squid)) != 0:
-                raise RuntimeError('Error occurred when reconfigure squid')
+                raise RuntimeError
         except RuntimeError:
             with open(self._dest_file, 'w') as f:
                 f.write(self._template)
