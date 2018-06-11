@@ -26,7 +26,7 @@ We need prepare a configuration file like ``conf/config.py``, then run FreeHP::
     $ freehp run -c conf/config.py
 
 FreeHP by default runs on port ``6256``.
-Thus we can visit http://localhost:6256/ and see a list of latest available proxies.
+Thus we can visit http://localhost:6256/proxies and see a list of latest available proxies.
 
 Requirements
 ============

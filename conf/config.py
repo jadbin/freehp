@@ -1,7 +1,6 @@
 # coding=utf-8
 
 proxy_pages = {
-    'xicidaili': ['http://www.xicidaili.com/wt/{}'.format(i) for i in range(10, 0, -1)],
     '89ip': 'http://www.89ip.cn/tqdl.html?num=1000',
     '66ip': 'http://www.66ip.cn/mo.php?tqsl=1000',
     'kuaidaili': ['https://www.kuaidaili.com/free/inha/{}/'.format(i) for i in range(5, 0, -1)]
