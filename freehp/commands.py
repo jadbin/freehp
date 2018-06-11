@@ -125,11 +125,11 @@ class SquidCommand(Command):
                             help='the name of squid command')
         parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', default=False,
                             help='run in daemon mode')
-        parser.add_argument('--max-num', dest='max_num', metavar='NUM', default=squid.DEFAULT_MAX_NUM,
+        parser.add_argument('--max-num', dest='max_num', type=int, metavar='NUM', default=squid.DEFAULT_MAX_NUM,
                             help='max number of proxies, 0 for unlimited')
-        parser.add_argument('--update-interval', dest='update_interval', metavar='SECONDS',
+        parser.add_argument('--update-interval', dest='update_interval', type=int, metavar='SECONDS',
                             default=squid.DEFAULT_UPDATE_INTERVAL, help='update interval in seconds')
-        parser.add_argument('--timeout', dest='timeout', metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
+        parser.add_argument('--timeout', dest='timeout', type=int, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
                             help='timeout in seconds')
         parser.add_argument('--once', dest='once', action='store_true', default=False,
                             help='run only once')
