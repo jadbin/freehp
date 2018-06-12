@@ -24,6 +24,7 @@ class ProxyManager:
         self.loop = asyncio.new_event_loop()
 
         self._checker = self._load_checker(config.get("checker_cls"))
+        self._check_interval = self.config.get('check_interval')
         self._block_time = config.getint("block_time")
         self._proxy_queue = ProxyQueue(max_fail_times=config.getint("max_fail_times"),
                                        min_anonymity=config.getint('min_anonymity'))
@@ -34,6 +35,7 @@ class ProxyManager:
 
         self._futures = None
         self._wait_queue = Queue(loop=self.loop)
+        self._label_queue = Queue(loop=self.loop)
         self._is_running = False
 
     def start(self):
@@ -100,6 +102,9 @@ class ProxyManager:
         for i in range(checker_clients):
             f = asyncio.ensure_future(self._check_proxy_task(), loop=self.loop)
             self._futures.append(f)
+        for i in range(checker_clients):
+            f = asyncio.ensure_future(self._label_proxy_task(), loop=self.loop)
+            self._futures.append(f)
         f = asyncio.ensure_future(self._remove_blocked_proxy_task(), loop=self.loop)
         self._futures.append(f)
 
@@ -120,13 +125,14 @@ class ProxyManager:
                 await asyncio.sleep(5, loop=self.loop)
 
     async def _check_proxy_task(self):
-        check_interval = self.config.get('check_interval')
         while True:
             proxy = await self._wait_queue.get()
             res = await self._checker.check_proxy(proxy.addr)
             t = int(time.time())
-            proxy.timestamp = t + check_interval
+            proxy.timestamp = t + self._check_interval
             self._proxy_queue.feed_back(proxy, res)
+            if res:
+                await self._label_queue.put(proxy)
 
     async def _remove_blocked_proxy_task(self):
         while True:
@@ -135,6 +141,15 @@ class ProxyManager:
             for i in list(self._proxy_db.keys()):
                 if t - self._proxy_db[i].timestamp > self._block_time:
                     del self._proxy_db[i]
+
+    async def _label_proxy_task(self):
+        while True:
+            proxy = await self._label_queue.get()
+            t = time.time()
+            if t > proxy.timestamp:
+                continue
+            https = await self._checker.verify_https(proxy.addr)
+            proxy.https = https
 
     async def get_proxies(self, request):
         params = request.rel_url.query
@@ -162,8 +177,9 @@ class ProxyManager:
         res = []
         for p in t:
             if detail:
-                res.append({"address": p.addr, "success": p.good, "fail": p.bad, "timestamp": p.timestamp,
-                            'anonymity': p.anonymity})
+                res.append({"address": p.addr, "success": p.good, "fail": p.bad,
+                            'timestamp': p.timestamp - self._check_interval,
+                            'anonymity': p.anonymity, 'https': p.https})
             else:
                 res.append(p.addr)
         return res
@@ -226,13 +242,14 @@ class ProxyQueue:
 
 
 class ProxyInfo:
-    def __init__(self, addr, timestamp, *, good=0, bad=0, fail=1, anonymity=0):
+    def __init__(self, addr, timestamp, *, good=0, bad=0, fail=1, anonymity=0, https=False):
         self.addr = addr
         self.timestamp = timestamp
         self.good = good
         self.bad = bad
         self.fail = fail
         self.anonymity = anonymity
+        self.https = https
 
     @property
     def rate(self):

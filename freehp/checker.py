@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 IP_REG = re.compile('^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
 
 HTTP_CHECK_URL = 'http://httpbin.org/get'
+HTTPS_CHECK_URL = 'https://httpbin.org/get'
 
 
 class HttpbinChecker:
@@ -60,6 +61,28 @@ class HttpbinChecker:
             return False
         log.debug("Proxy %s is OK", addr)
         return True, anonymity
+
+    async def verify_https(self, addr):
+        if not addr.startswith("http://"):
+            proxy = "http://{0}".format(addr)
+        else:
+            proxy = addr
+        try:
+            async with aiohttp.ClientSession(loop=self.loop) as session:
+                with async_timeout.timeout(self.timeout, loop=self.loop):
+                    seed = str(random.randint(0, 99999999))
+                    url = "{}?seed={}".format(HTTPS_CHECK_URL, seed)
+                    async with session.request("GET", url, proxy=proxy) as resp:
+                        body = await resp.read()
+                        data = json.loads(body.decode())
+                        if data['args'].get('seed') != seed:
+                            return False
+        except CancelledError:
+            raise
+        except Exception:
+            return False
+        log.debug("Proxy %s supports HTTPS", addr)
+        return True
 
     async def get_origin_ip(self):
         async with aiohttp.ClientSession(loop=self.loop) as session:
