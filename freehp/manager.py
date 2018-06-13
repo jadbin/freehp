@@ -115,7 +115,7 @@ class ProxyManager:
             except CancelledError:
                 raise
             except Exception:
-                log.warning("Unexpected error occurred when add proxy '%s'", p, exc_info=True)
+                log.warning("Failed to add proxy '%s'", p, exc_info=True)
 
     def _init_checker(self):
         checker_clients = self.config.getint('checker_clients')
@@ -198,16 +198,32 @@ class ProxyManager:
         count = params.get("count", 0)
         if count:
             count = int(count)
-        detail = "detail" in params
-        order = params.get('order', 'rate')
-        log.info("GET '/', count=%s, detail=%s, order=%s", count, detail, order)
-        proxy_list = self._get_proxies(count, detail=detail, order=order)
+        kwargs = {}
+        if 'order' in params:
+            kwargs['order'] = params.get('order')
+        if 'detail' in params:
+            kwargs['detail'] = True
+        if 'https' in params:
+            kwargs['https'] = True
+        if 'post' in params:
+            kwargs['post'] = True
+        min_anonymity = params.get('min_anonymity')
+        if min_anonymity is not None:
+            kwargs['min_anonymity'] = int(min_anonymity)
+        log.info('GET /proxies %s', kwargs)
+        proxy_list = self._get_proxies(count, **kwargs)
         return web.Response(body=json.dumps(proxy_list).encode("utf-8"),
                             charset="utf-8",
                             content_type="application/json")
 
-    def _get_proxies(self, count, detail=False, order='rate'):
+    def _get_proxies(self, count, detail=False, order='rate', https=False, post=False, min_anonymity=0):
         t = self._proxy_queue.get_proxies()
+        if min_anonymity > 0:
+            t = [i for i in t if i.anonymity >= min_anonymity]
+        if https:
+            t = [i for i in t if i.https]
+        if post:
+            t = [i for i in t if i.post]
         if count <= 0 or len(t) < count:
             count = len(t)
         if order == 'rate':

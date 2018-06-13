@@ -109,13 +109,13 @@ class Squid:
         except CancelledError:
             raise
         except Exception:
-            log.error("Error occurred when get proxies from '%s'", self._request_url, exc_info=True)
+            log.error("Failed to get proxies from '%s'", self._request_url, exc_info=True)
 
         if len(data) > 0:
             try:
                 self._reconfigure_squid(data)
             except Exception:
-                log.error("Error occurred when reconfigure squid", exc_info=True)
+                log.error("Failed to reconfigure squid", exc_info=True)
 
     def _reconfigure_squid(self, proxies):
         lines = [self._template, '\n# cache_peer configuration\n']

@@ -68,8 +68,8 @@ class ProxySpider:
                                 body = body.decode('utf-8', errors='ignore')
                 except CancelledError:
                     raise
-                except Exception as e:
-                    log.info("%s error occurred when scrap proxy on url=%s: %s", type(e), url, e)
+                except Exception:
+                    log.info("Failed to scrap proxy on '%s'", url)
                 else:
                     retry_cnt = 0
                     proxies = extract_proxies(body)
