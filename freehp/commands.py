@@ -102,8 +102,11 @@ class RunCommand(Command):
         if self.config.getbool('daemon'):
             utils.be_daemon()
         utils.configure_logging('freehp', self.config)
-        agent = ProxyManager(self.config)
-        agent.start()
+        try:
+            agent = ProxyManager(self.config)
+            agent.start()
+        except Exception as e:
+            log.error(e, exc_info=True)
 
 
 class SquidCommand(Command):
@@ -165,10 +168,13 @@ class SquidCommand(Command):
         if config.getbool(args.daemon):
             utils.be_daemon()
         utils.configure_logging('freehp', self.config)
-        s = squid.Squid(args.dest_file, args.template, freehp_address=args.address, max_num=args.max_num,
-                        min_anonymity=args.min_anonymity, https=args.https, post=args.post,
-                        update_interval=args.update_interval, timeout=args.timeout, once=args.once)
-        s.start()
+        try:
+            s = squid.Squid(args.dest_file, args.template, freehp_address=args.address, max_num=args.max_num,
+                            min_anonymity=args.min_anonymity, https=args.https, post=args.post,
+                            update_interval=args.update_interval, timeout=args.timeout, once=args.once)
+            s.start()
+        except Exception as e:
+            log.error(e, exc_info=True)
 
 
 class VersionCommand(Command):

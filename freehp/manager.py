@@ -173,6 +173,8 @@ class ProxyManager:
                 continue
             https = await self._checker.verify_https(proxy.addr)
             proxy.https = https
+            post = await self._checker.verify_post(proxy.addr)
+            proxy.post = post
 
     async def _supervisor(self):
         def supervise(name, futures, futures_done):
@@ -219,7 +221,7 @@ class ProxyManager:
             if detail:
                 res.append({"address": p.addr, "success": p.good, "fail": p.bad,
                             'timestamp': p.timestamp - self._check_interval,
-                            'anonymity': p.anonymity, 'https': p.https})
+                            'anonymity': p.anonymity, 'https': p.https, 'post': p.post})
             else:
                 res.append(p.addr)
         return res
@@ -282,7 +284,7 @@ class ProxyQueue:
 
 
 class ProxyInfo:
-    def __init__(self, addr, timestamp, *, good=0, bad=0, fail=1, anonymity=0, https=False):
+    def __init__(self, addr, timestamp, *, good=0, bad=0, fail=1, anonymity=0, https=False, post=False):
         self.addr = addr
         self.timestamp = timestamp
         self.good = good
@@ -290,6 +292,7 @@ class ProxyInfo:
         self.fail = fail
         self.anonymity = anonymity
         self.https = https
+        self.post = post
 
     @property
     def rate(self):
