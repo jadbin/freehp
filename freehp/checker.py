@@ -34,7 +34,7 @@ class HttpbinChecker:
         c = manager.config.get("httpbin_checker") or {}
         return cls(loop=manager.loop, **c)
 
-    async def check_proxy(self, addr):
+    async def check_proxy(self, addr, https=False):
         anonymity = 0
         if not addr.startswith("http://"):
             proxy = "http://{0}".format(addr)
@@ -44,7 +44,7 @@ class HttpbinChecker:
             async with aiohttp.ClientSession(loop=self.loop) as session:
                 with async_timeout.timeout(self.timeout, loop=self.loop):
                     seed = str(random.randint(0, 99999999))
-                    url = "{}?show_env=1&seed={}".format(HTTP_CHECK_URL, seed)
+                    url = "{}?show_env=1&seed={}".format(HTTPS_CHECK_URL if https else HTTP_CHECK_URL, seed)
                     async with session.get(url, proxy=proxy, headers={'Connection': 'keep-alive'}) as resp:
                         body = await resp.read()
                         data = json.loads(body.decode())
@@ -58,30 +58,8 @@ class HttpbinChecker:
             raise
         except Exception:
             return False
-        log.debug("Proxy %s is OK", addr)
+        log.debug("Proxy %s supports for %s", addr, 'HTTPS' if https else 'HTTP')
         return True, anonymity
-
-    async def verify_https(self, addr):
-        if not addr.startswith("http://"):
-            proxy = "http://{0}".format(addr)
-        else:
-            proxy = addr
-        try:
-            async with aiohttp.ClientSession(loop=self.loop) as session:
-                with async_timeout.timeout(self.timeout, loop=self.loop):
-                    seed = str(random.randint(0, 99999999))
-                    url = "{}?seed={}".format(HTTPS_CHECK_URL, seed)
-                    async with session.get(url, proxy=proxy) as resp:
-                        body = await resp.read()
-                        data = json.loads(body.decode())
-                        if data['args'].get('seed') != seed:
-                            return False
-        except CancelledError:
-            raise
-        except Exception:
-            return False
-        log.debug("Proxy %s supports for HTTPS", addr)
-        return True
 
     async def verify_post(self, addr):
         if not addr.startswith("http://"):

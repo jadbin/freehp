@@ -171,8 +171,11 @@ class ProxyManager:
             t = time.time()
             if t > proxy.timestamp:
                 continue
-            https = await self._checker.verify_https(proxy.addr)
-            proxy.https = https
+            https = await self._checker.check_proxy(proxy.addr, https=True)
+            if https and https[1] >= proxy.anonymity:
+                proxy.https = True
+            else:
+                proxy.https = False
             post = await self._checker.verify_post(proxy.addr)
             proxy.post = post
 
