@@ -33,9 +33,14 @@ class ProxyManager:
 
         self._proxy_db = {}
 
-        self._futures = None
         self._wait_queue = Queue(loop=self.loop)
         self._label_queue = Queue(loop=self.loop)
+        self._futures = None
+        self._futures_done = None
+        self._check_futures = None
+        self._check_futures_done = None
+        self._label_futures = None
+        self._label_futures_done = None
         self._is_running = False
 
     def start(self):
@@ -43,9 +48,16 @@ class ProxyManager:
             self._is_running = True
             asyncio.set_event_loop(self.loop)
             self._futures = []
+            self._futures_done = set()
+            self._check_futures = []
+            self._check_futures_done = set()
+            self._label_futures = []
+            self._label_futures_done = set()
             self._init_server()
             self._init_checker()
             self._spider.open()
+            f = asyncio.ensure_future(self._supervisor(), loop=self.loop)
+            self._futures.append(f)
             self.loop.add_signal_handler(signal.SIGINT,
                                          lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
             self.loop.add_signal_handler(signal.SIGTERM,
@@ -66,6 +78,17 @@ class ProxyManager:
             for f in self._futures:
                 f.cancel()
             self._futures = None
+            self._futures_done = None
+        if self._check_futures:
+            for f in self._check_futures:
+                f.cancel()
+            self._check_futures = None
+            self._check_futures_done = None
+        if self._label_futures:
+            for f in self._label_futures:
+                f.cancel()
+            self._label_futures = None
+            self._label_futures_done = None
         await asyncio.sleep(0.001, loop=self.loop)
         self.loop.stop()
 
@@ -101,10 +124,10 @@ class ProxyManager:
         self._futures.append(f)
         for i in range(checker_clients):
             f = asyncio.ensure_future(self._check_proxy_task(), loop=self.loop)
-            self._futures.append(f)
+            self._check_futures.append(f)
         for i in range(checker_clients):
             f = asyncio.ensure_future(self._label_proxy_task(), loop=self.loop)
-            self._futures.append(f)
+            self._label_futures.append(f)
         f = asyncio.ensure_future(self._remove_blocked_proxy_task(), loop=self.loop)
         self._futures.append(f)
 
@@ -150,6 +173,23 @@ class ProxyManager:
                 continue
             https = await self._checker.verify_https(proxy.addr)
             proxy.https = https
+
+    async def _supervisor(self):
+        def supervise(name, futures, futures_done):
+            for i in range(len(futures)):
+                f = futures[i]
+                if f.done():
+                    if i not in futures_done:
+                        futures.add(i)
+                        reason = "cancelled" if f.cancelled() else str(f.exception())
+                        log.error("%s[%s] is shut down: %s", name, i, reason)
+                        self._check_futures[i] = None
+
+        while True:
+            await asyncio.sleep(600, loop=self.loop)
+            supervise('Check future', self._check_futures, self._check_futures_done)
+            supervise('Label future', self._label_futures, self._label_futures_done)
+            supervise('Future', self._futures, self._futures_done)
 
     async def get_proxies(self, request):
         params = request.rel_url.query
