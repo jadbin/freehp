@@ -17,33 +17,43 @@ DEFAULT_FREEHP_ADDRESS = 'localhost:6256'
 DEFAULT_SQUID = 'squid3'
 DEFAULT_TIMEOUT = 30
 DEFAULT_MAX_NUM = 0
+DEFAULT_MIN_ANONYMITY = 1
+DEFAULT_HTTPS = False
+DEFAULT_POST = False
 
 PEER_CONF = "cache_peer {} parent {} 0 no-query weighted-round-robin weight=1 connect-fail-limit=2 allow-miss max-conn=5 name={}\n"
 
 
 class Squid:
-    def __init__(self, dest_file, tpl_file, freehp_address=DEFAULT_FREEHP_ADDRESS, squid=DEFAULT_SQUID,
-                 max_num=DEFAULT_MAX_NUM, update_interval=DEFAULT_UPDATE_INTERVAL, timeout=DEFAULT_TIMEOUT, once=False):
+    def __init__(self, dest_file, tpl_file, squid=DEFAULT_SQUID, update_interval=DEFAULT_UPDATE_INTERVAL,
+                 timeout=DEFAULT_TIMEOUT, once=False, **kwargs):
         self.loop = asyncio.new_event_loop()
         self._dest_file = dest_file
         with open(tpl_file, 'rb') as f:
             self._template = f.read().decode()
         self._squid = squid
-        self._max_num = max_num
         self._update_interval = update_interval
         self._timeout = timeout
         self._once = once
-        if freehp_address.startswith('http://') or freehp_address.startswith('https://'):
-            self._freehp_address = freehp_address
-        else:
-            self._freehp_address = 'http://' + freehp_address
-        if not self._freehp_address.endswith('/'):
-            self._freehp_address += '/'
-        self._freehp_address += 'proxies'
-        if max_num > 0:
-            self._freehp_address = '{}?count={}'.format(self._freehp_address, max_num)
-        self._future = None
+        self._request_url = self._construct_request_url(**kwargs)
+        self._futures = None
         self._is_running = False
+
+    def _construct_request_url(self, freehp_address=DEFAULT_FREEHP_ADDRESS, max_num=DEFAULT_MAX_NUM,
+                               min_anonymity=DEFAULT_MIN_ANONYMITY, https=DEFAULT_HTTPS, post=DEFAULT_POST, **kwargs):
+        if freehp_address.startswith('http://') or freehp_address.startswith('https://'):
+            url = freehp_address
+        else:
+            url = 'http://' + freehp_address
+        if not url.endswith('/'):
+            url += '/'
+        url += 'proxies'
+        url = '{}?count={}&min_anonymity={}'.format(url, max_num, min_anonymity)
+        if https:
+            url += '&https'
+        if post:
+            url += '&post'
+        return url
 
     def start(self):
         if not self._is_running:
@@ -52,9 +62,12 @@ class Squid:
             if self._once:
                 log.info('Run only once')
                 self.loop.run_until_complete(self._maintain_squid())
+                self._is_running = False
                 log.info('Task is done')
             else:
-                self._future = asyncio.ensure_future(self._maintain_squid_task(), loop=self.loop)
+                self._futures = []
+                f = asyncio.ensure_future(self._maintain_squid_task(), loop=self.loop)
+                self._futures.append(f)
                 self.loop.add_signal_handler(signal.SIGINT,
                                              lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
                 self.loop.add_signal_handler(signal.SIGTERM,
@@ -71,11 +84,13 @@ class Squid:
             return
         self._is_running = False
         log.info("Shutdown now")
-        if self._future:
-            self._future.cancel()
-        self._future = None
+        if self._futures:
+            for f in self._futures:
+                f.cancel()
+            self._futures = None
         await asyncio.sleep(0.001, loop=self.loop)
         self.loop.stop()
+        self._recover_configuration()
 
     async def _maintain_squid_task(self):
         while True:
@@ -87,14 +102,14 @@ class Squid:
         try:
             async with aiohttp.ClientSession(loop=self.loop) as session:
                 with async_timeout.timeout(self._timeout, loop=self.loop):
-                    async with session.request("GET", self._freehp_address) as resp:
+                    async with session.get(self._request_url) as resp:
                         body = await resp.read()
                         data = json.loads(body.decode('utf-8'))
                         log.debug('Get %s proxies', len(data))
         except CancelledError:
             raise
         except Exception:
-            log.error("Error occurred when get proxies from '%s'", self._freehp_address, exc_info=True)
+            log.error("Error occurred when get proxies from '%s'", self._request_url, exc_info=True)
 
         if len(data) > 0:
             try:
@@ -114,6 +129,9 @@ class Squid:
             if os.system('{} -k reconfigure'.format(self._squid)) != 0:
                 raise RuntimeError
         except RuntimeError:
-            with open(self._dest_file, 'w') as f:
-                f.write(self._template)
+            self._recover_configuration()
             raise
+
+    def _recover_configuration(self):
+        with open(self._dest_file, 'w') as f:
+            f.write(self._template)
