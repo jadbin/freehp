@@ -172,7 +172,7 @@ class ProxyManager:
             if t > proxy.timestamp:
                 continue
             https = await self._checker.check_proxy(proxy.addr, https=True)
-            if https and https[1] >= proxy.anonymity:
+            if https and https[1] > 0:
                 proxy.https = True
             else:
                 proxy.https = False
