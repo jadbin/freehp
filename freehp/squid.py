@@ -27,7 +27,7 @@ PEER_ACCESS_CONF = 'cache_peer_access {} {} {}\n'
 
 class Squid:
     def __init__(self, dest_file, tpl_file, squid=DEFAULT_SQUID, update_interval=DEFAULT_UPDATE_INTERVAL,
-                 timeout=DEFAULT_TIMEOUT, once=False, **kwargs):
+                 timeout=DEFAULT_TIMEOUT, once=False, min_anonymity=DEFAULT_MIN_ANONYMITY, **kwargs):
         self.loop = asyncio.new_event_loop()
         self._dest_file = dest_file
         with open(tpl_file, 'rb') as f:
@@ -36,13 +36,13 @@ class Squid:
         self._update_interval = update_interval
         self._timeout = timeout
         self._once = once
+        self._min_anonymity = min_anonymity
         self._request_urls = self._construct_request_urls(**kwargs)
         self._futures = None
         self._is_running = False
 
     def _construct_request_urls(self, address=DEFAULT_FREEHP_ADDRESS, max_num=DEFAULT_MAX_NUM,
-                                min_anonymity=DEFAULT_MIN_ANONYMITY, https=DEFAULT_HTTPS, post=DEFAULT_POST,
-                                **kwargs):
+                                https=DEFAULT_HTTPS, post=DEFAULT_POST, **kwargs):
         if not address.startswith('http://') and not address.startswith('https://'):
             address = 'http://' + address
         if not address.endswith('/'):
@@ -50,13 +50,13 @@ class Squid:
         address += 'proxies'
 
         urls = []
-        url = '{}?count={}&min_anonymity={}&detail'.format(address, max_num, min_anonymity)
+        url = '{}?count={}&min_anonymity={}&detail'.format(address, max_num, self._min_anonymity)
         urls.append(url)
         if https:
             url = '{}?count={}&https&detail'.format(address, max_num)
             urls.append(url)
         if post:
-            url = '{}?count={}&min_anonymity={}&post&detail'.format(address, max_num, min_anonymity)
+            url = '{}?count={}&min_anonymity={}&post&detail'.format(address, max_num, self._min_anonymity)
             urls.append(url)
         return urls
 
@@ -136,6 +136,8 @@ class Squid:
             name = host + '.' + port
             lines.append(PEER_CONF.format(host, port, name))
             dl = []
+            if p['anonymity'] < self._min_anonymity:
+                dl.append('!SSL_ports')
             if not p['https']:
                 dl.append('SSL_ports')
             if not p['post']:

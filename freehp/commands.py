@@ -133,11 +133,11 @@ class SquidCommand(Command):
                             help='the name of squid command')
         parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', default=False,
                             help='run in daemon mode')
-        parser.add_argument('--max-num', dest='max_num', type=int, metavar='NUM', default=squid.DEFAULT_MAX_NUM,
-                            help='maximal number of proxies to preserve the quality of proxies, 0 for unlimited')
         parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
                             default=squid.DEFAULT_MIN_ANONYMITY,
                             help='minimum anonymity level, 0: transparent, 1: anonymous, 2: elite proxy')
+        parser.add_argument('--max-num', dest='max_num', type=int, metavar='NUM', default=squid.DEFAULT_MAX_NUM,
+                            help='maximal number of proxies to preserve the quality of proxies, 0 for unlimited')
         parser.add_argument('--https', dest='https', action='store_true', default=squid.DEFAULT_HTTPS,
                             help='need proxy support for HTTPS')
         parser.add_argument('--post', dest='post', action='store_true', default=squid.DEFAULT_POST,
