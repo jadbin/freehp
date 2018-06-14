@@ -21,7 +21,8 @@ DEFAULT_MIN_ANONYMITY = 1
 DEFAULT_HTTPS = False
 DEFAULT_POST = False
 
-PEER_CONF = "cache_peer {} parent {} 0 no-query weighted-round-robin weight=1 connect-fail-limit=2 allow-miss max-conn=5 name={}\n"
+PEER_CONF = 'cache_peer {} parent {} 0 no-query weighted-round-robin weight=1 connect-fail-limit=2 allow-miss max-conn=5 name={}\n'
+PEER_ACCESS_CONF = 'cache_peer_access {} {} {}\n'
 
 
 class Squid:
@@ -35,25 +36,29 @@ class Squid:
         self._update_interval = update_interval
         self._timeout = timeout
         self._once = once
-        self._request_url = self._construct_request_url(**kwargs)
+        self._request_urls = self._construct_request_urls(**kwargs)
         self._futures = None
         self._is_running = False
 
-    def _construct_request_url(self, freehp_address=DEFAULT_FREEHP_ADDRESS, max_num=DEFAULT_MAX_NUM,
-                               min_anonymity=DEFAULT_MIN_ANONYMITY, https=DEFAULT_HTTPS, post=DEFAULT_POST, **kwargs):
-        if freehp_address.startswith('http://') or freehp_address.startswith('https://'):
-            url = freehp_address
-        else:
-            url = 'http://' + freehp_address
-        if not url.endswith('/'):
-            url += '/'
-        url += 'proxies'
-        url = '{}?count={}&min_anonymity={}'.format(url, max_num, min_anonymity)
+    def _construct_request_urls(self, address=DEFAULT_FREEHP_ADDRESS, max_num=DEFAULT_MAX_NUM,
+                                min_anonymity=DEFAULT_MIN_ANONYMITY, https=DEFAULT_HTTPS, post=DEFAULT_POST,
+                                **kwargs):
+        if not address.startswith('http://') and not address.startswith('https://'):
+            address = 'http://' + address
+        if not address.endswith('/'):
+            address += '/'
+        address += 'proxies'
+
+        urls = []
+        url = '{}?count={}&min_anonymity={}&detail'.format(address, max_num, min_anonymity)
+        urls.append(url)
         if https:
-            url += '&https'
+            url = '{}?count={}&https&detail'.format(address, max_num)
+            urls.append(url)
         if post:
-            url += '&post'
-        return url
+            url = '{}?count={}&min_anonymity={}&post&detail'.format(address, max_num, min_anonymity)
+            urls.append(url)
+        return urls
 
     def start(self):
         if not self._is_running:
@@ -99,17 +104,24 @@ class Squid:
 
     async def _maintain_squid(self):
         data = []
+        proxies = set()
         try:
-            async with aiohttp.ClientSession(loop=self.loop) as session:
-                with async_timeout.timeout(self._timeout, loop=self.loop):
-                    async with session.get(self._request_url) as resp:
-                        body = await resp.read()
-                        data = json.loads(body.decode('utf-8'))
-                        log.debug('Get %s proxies', len(data))
+            for url in self._request_urls:
+                async with aiohttp.ClientSession(loop=self.loop) as session:
+                    with async_timeout.timeout(self._timeout, loop=self.loop):
+                        async with session.get(url) as resp:
+                            body = await resp.read()
+                            d = json.loads(body.decode('utf-8'))
+                            for i in d:
+                                a = i['address']
+                                if a not in proxies:
+                                    proxies.add(a)
+                                    data.append(i)
+            log.debug('Get %s proxies', len(data))
         except CancelledError:
             raise
         except Exception:
-            log.error("Failed to get proxies from '%s'", self._request_url, exc_info=True)
+            log.error("Failed to get proxies", exc_info=True)
 
         if len(data) > 0:
             try:
@@ -120,8 +132,17 @@ class Squid:
     def _reconfigure_squid(self, proxies):
         lines = [self._template, '\n# cache_peer configuration\n']
         for p in proxies:
-            host, port = p.split(':')
-            lines.append(PEER_CONF.format(host, port, host + '.' + port))
+            host, port = p['address'].split(':')
+            name = host + '.' + port
+            lines.append(PEER_CONF.format(host, port, name))
+            dl = []
+            if not p['https']:
+                dl.append('SSL_ports')
+            if not p['post']:
+                dl.append('POST')
+            if len(dl) > 0:
+                lines.append(PEER_ACCESS_CONF.format(name, 'deny', ' '.join(dl)))
+
         with open(self._dest_file, 'w') as f:
             f.writelines(lines)
         log.info('Reconfigure squid with %s proxies, conf=%s', len(proxies), self._dest_file)

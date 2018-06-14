@@ -70,7 +70,7 @@ class RunCommand(Command):
                             help="log file")
         parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
                             default=defaultconfig.min_anonymity,
-                            help='minimal anonymity, 0: transparent, 1: anonymous, 2: elite proxy')
+                            help='minimum anonymity level, 0: transparent, 1: anonymous, 2: elite proxy')
         parser.add_argument("-s", "--set", dest="set", action="append", default=[], metavar="NAME=VALUE",
                             help="set/override setting (may be repeated)")
 
@@ -134,10 +134,10 @@ class SquidCommand(Command):
         parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', default=False,
                             help='run in daemon mode')
         parser.add_argument('--max-num', dest='max_num', type=int, metavar='NUM', default=squid.DEFAULT_MAX_NUM,
-                            help='maximal number of proxies, 0 for unlimited')
+                            help='maximal number of proxies to preserve the quality of proxies, 0 for unlimited')
         parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
                             default=squid.DEFAULT_MIN_ANONYMITY,
-                            help='minimal anonymity, 0: transparent, 1: anonymous, 2: elite proxy')
+                            help='minimum anonymity level, 0: transparent, 1: anonymous, 2: elite proxy')
         parser.add_argument('--https', dest='https', action='store_true', default=squid.DEFAULT_HTTPS,
                             help='need proxy support for HTTPS')
         parser.add_argument('--post', dest='post', action='store_true', default=squid.DEFAULT_POST,
@@ -169,7 +169,7 @@ class SquidCommand(Command):
             utils.be_daemon()
         utils.configure_logging('freehp', self.config)
         try:
-            s = squid.Squid(args.dest_file, args.template, freehp_address=args.address, max_num=args.max_num,
+            s = squid.Squid(args.dest_file, args.template, address=args.address, max_num=args.max_num,
                             min_anonymity=args.min_anonymity, https=args.https, post=args.post,
                             update_interval=args.update_interval, timeout=args.timeout, once=args.once)
             s.start()
