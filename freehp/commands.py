@@ -139,9 +139,9 @@ class SquidCommand(Command):
         parser.add_argument('--max-num', dest='max_num', type=int, metavar='NUM', default=squid.DEFAULT_MAX_NUM,
                             help='maximal number of proxies to preserve the quality of proxies, 0 for unlimited')
         parser.add_argument('--https', dest='https', action='store_true', default=squid.DEFAULT_HTTPS,
-                            help='need proxy support for HTTPS')
+                            help='configure a list of proxies which support for HTTPS')
         parser.add_argument('--post', dest='post', action='store_true', default=squid.DEFAULT_POST,
-                            help='need proxy support for POST')
+                            help='configure a list of proxies which support for POST')
         parser.add_argument('--update-interval', dest='update_interval', type=int, metavar='SECONDS',
                             default=squid.DEFAULT_UPDATE_INTERVAL, help='update interval in seconds')
         parser.add_argument('--timeout', dest='timeout', type=int, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
