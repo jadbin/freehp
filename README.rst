@@ -1,5 +1,5 @@
 ======
-FreeHP
+freehp
 ======
 
 .. image:: https://img.shields.io/badge/license-Apache 2-blue.svg
@@ -21,11 +21,11 @@ Use pip::
 Getting Started
 ===============
 
-We need prepare a configuration file like ``conf/config.py``, then run FreeHP::
+We need prepare a configuration file like ``conf/config.py``, then run freehp::
 
     $ freehp run -c conf/config.py
 
-FreeHP by default runs on port ``6256``.
+By default, freehp runs on port ``6256``.
 Thus we can visit http://localhost:6256/proxies and see a list of latest available proxies.
 
 Requirements
