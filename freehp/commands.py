@@ -71,6 +71,8 @@ class RunCommand(Command):
         parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
                             default=defaultconfig.min_anonymity,
                             help='minimum anonymity level, 0: transparent, 1: anonymous, 2: elite proxy')
+        parser.add_argument('--timeout', dest='timeout', type=float, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
+                            help='timeout in seconds')
         parser.add_argument("-s", "--set", dest="set", action="append", default=[], metavar="NAME=VALUE",
                             help="set/override setting (may be repeated)")
 
@@ -93,10 +95,12 @@ class RunCommand(Command):
             self.config.set('log_file', args.log_file)
         if args.min_anonymity:
             self.config.set('min_anonymity', args.min_anonymity)
+        if args.timeout:
+            self.config.set('timeout', args.timeout)
         try:
             self.config.update(dict(x.split("=", 1) for x in args.set))
         except ValueError:
-            raise UsageError("Invalid -s value, use -s NAME=VALUE", print_help=False)
+            raise UsageError("Invalid -s value, use -s NAME=VALUE")
 
     def run(self, args):
         if self.config.getbool('daemon'):
@@ -142,9 +146,9 @@ class SquidCommand(Command):
                             help='configure a list of proxies which support for HTTPS')
         parser.add_argument('--post', dest='post', action='store_true', default=squid.DEFAULT_POST,
                             help='configure a list of proxies which support for POST')
-        parser.add_argument('--update-interval', dest='update_interval', type=int, metavar='SECONDS',
+        parser.add_argument('--update-interval', dest='update_interval', type=float, metavar='SECONDS',
                             default=squid.DEFAULT_UPDATE_INTERVAL, help='update interval in seconds')
-        parser.add_argument('--timeout', dest='timeout', type=int, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
+        parser.add_argument('--timeout', dest='timeout', type=float, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
                             help='timeout in seconds')
         parser.add_argument('--once', dest='once', action='store_true', default=False,
                             help='run only once')
@@ -157,7 +161,7 @@ class SquidCommand(Command):
         args.dest_file = args.dest_file[0]
         if not args.template:
             if not isfile(args.dest_file):
-                raise UsageError('The template of squid configuration is not specified', print_help=False)
+                raise UsageError('The template of squid configuration is not specified')
             args.template = args.dest_file
         if args.log_level:
             self.config.set("log_level", args.log_level)

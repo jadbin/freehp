@@ -2,9 +2,13 @@
 
 import os
 from os.path import isfile
-
 import logging
 from importlib import import_module
+from asyncio import CancelledError
+
+import aiohttp
+import async_timeout
+import json
 
 
 def load_object(path):
@@ -61,3 +65,22 @@ def be_daemon():
         os.dup2(fd_null, 0)
     os.dup2(fd_null, 1)
     os.dup2(fd_null, 2)
+
+
+async def get_origin_ip(loop):
+    import re
+    ip = None
+    ip_reg = re.compile('^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+    try:
+        async with aiohttp.ClientSession(loop=loop) as session:
+            with async_timeout.timeout(30, loop=loop):
+                async with session.request('GET', 'http://httpbin.org/get') as resp:
+                    body = await resp.read()
+                    data = json.loads(body.decode())
+                    ip = data['origin']
+        assert ip_reg.match(ip) is not None
+    except CancelledError:
+        raise
+    except Exception:
+        pass
+    return ip

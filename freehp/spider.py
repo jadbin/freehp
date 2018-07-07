@@ -68,8 +68,8 @@ class ProxySpider:
                                 body = body.decode('utf-8', errors='ignore')
                 except CancelledError:
                     raise
-                except Exception:
-                    log.info("Failed to scrap proxy on '%s'", url)
+                except Exception as e:
+                    log.info("Failed to scrap proxy on '%s': %s", url, e)
                 else:
                     retry_cnt = 0
                     proxies = extract_proxies(body)
@@ -77,5 +77,5 @@ class ProxySpider:
                     if proxies:
                         for r in self._receivers:
                             await r(proxies)
-            await asyncio.sleep(self._sleep_time, loop=self._loop)
+                await asyncio.sleep(self._sleep_time, loop=self._loop)
         return time.time() - start_time

@@ -60,11 +60,7 @@ def main(argv=None):
         cmd.process_arguments(args)
         cmd.run(args)
     except UsageError as e:
-        if str(e):
-            parser.error(str(e))
-        if e.print_help:
-            parser.print_help()
-        sys.exit(2)
+        parser.error(str(e))
     else:
         if cmd.exitcode:
             sys.exit(cmd.exitcode)

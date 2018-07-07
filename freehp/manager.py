@@ -12,7 +12,7 @@ from asyncio import CancelledError
 from aiohttp import web
 
 from freehp.spider import ProxySpider
-from freehp.utils import load_object
+from freehp.utils import load_object, get_origin_ip
 from freehp import defaultconfig
 
 log = logging.getLogger(__name__)
@@ -22,6 +22,13 @@ class ProxyManager:
     def __init__(self, config):
         self.config = config
         self.loop = asyncio.new_event_loop()
+
+        if not self.config.get('origin_ip'):
+            origin_ip = self.loop.run_until_complete(get_origin_ip(self.loop))
+            if not origin_ip:
+                raise RuntimeError('Failed to get origin IP address')
+            self.config.set('origin_ip', origin_ip)
+        log.info('Origin IP address: %s', self.config['origin_ip'])
 
         self._checker = self._load_checker(config.get("checker_cls"))
         self._check_interval = self.config.get('check_interval')

@@ -16,6 +16,7 @@ min_anonymity = 0
 check_interval = 300
 checker_cls = 'freehp.checker.HttpbinChecker'
 checker_clients = 100
+timeout = 10
 
 scrap_interval = 300
 spider_timeout = 30

@@ -7,7 +7,7 @@ import async_timeout
 from freehp.checker import HttpbinChecker
 
 
-async def make_proxy_server(test_server, loop):
+async def make_proxy_server(aiohttp_server, loop):
     async def process(request):
         async with aiohttp.ClientSession(loop=loop) as session:
             with async_timeout.timeout(60, loop=loop):
@@ -17,17 +17,17 @@ async def make_proxy_server(test_server, loop):
                                         body=body,
                                         headers=resp.headers)
 
-    app = web.Application()
+    app = web.Application(loop=loop)
     app.router.add_route("GET", "/{tail:.*}", process)
-    server = await test_server(app)
+    server = await aiohttp_server(app)
     return server
 
 
 class TestHttpbinChecker:
-    async def test_check_proxy(self, test_server, loop):
-        server = await make_proxy_server(test_server, loop)
+    async def test_check_proxy(self, aiohttp_server, loop):
+        server = await make_proxy_server(aiohttp_server, loop)
         checker = HttpbinChecker(loop=loop)
-        ok = await checker.check_proxy("{}:{}".format(server.host, server.port))
-        assert ok is True
-        ok = await checker.check_proxy("{}:{}".format(server.host, server.port - 1))
-        assert ok is False
+        res = await checker.check_proxy("{}:{}".format(server.host, server.port))
+        assert res and res[0] is True
+        res = await checker.check_proxy("{}:{}".format(server.host, server.port - 1))
+        assert not res

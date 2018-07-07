@@ -5,14 +5,13 @@ import random
 import asyncio
 import logging
 from asyncio import CancelledError
-import re
 
 import aiohttp
 import async_timeout
 
-log = logging.getLogger(__name__)
+from freehp import defaultconfig
 
-IP_REG = re.compile('^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+log = logging.getLogger(__name__)
 
 HTTP_CHECK_URL = 'http://httpbin.org/get'
 HTTPS_CHECK_URL = 'https://httpbin.org/get'
@@ -20,19 +19,15 @@ POST_CHECK_URL = 'http://httpbin.org/post'
 
 
 class HttpbinChecker:
-    def __init__(self, *, loop=None, timeout=10):
+    def __init__(self, *, loop=None, timeout=defaultconfig.timeout, origin_ip=None):
         self.loop = loop or asyncio.get_event_loop()
         self.timeout = int(timeout)
-
-        self.origin_ip = self.loop.run_until_complete(self.get_origin_ip())
-        if not self.origin_ip:
-            raise RuntimeError('Failed to get origin IP address')
-        log.info('Origin IP address: %s', self.origin_ip)
+        self.origin_ip = origin_ip
 
     @classmethod
     def from_manager(cls, manager):
-        c = manager.config.get("httpbin_checker") or {}
-        return cls(loop=manager.loop, **c)
+        config = manager.config
+        return cls(loop=manager.loop, timeout=config.get('timeout'), origin_ip=config.get('origin_ip'))
 
     async def check_proxy(self, addr, https=False):
         anonymity = 0
@@ -50,10 +45,11 @@ class HttpbinChecker:
                         data = json.loads(body.decode())
                         if data['args'].get('seed') != seed:
                             return False
-                        if self.origin_ip not in data['origin']:
-                            anonymity = 1
-                        if self._is_elite_proxy(data):
-                            anonymity = 2
+                        if self.origin_ip:
+                            if self.origin_ip not in data['origin']:
+                                anonymity = 1
+                            if self._is_elite_proxy(data):
+                                anonymity = 2
         except CancelledError:
             raise
         except Exception:
@@ -83,22 +79,6 @@ class HttpbinChecker:
             return False
         log.debug("Proxy %s supports for POST", addr)
         return True
-
-    async def get_origin_ip(self):
-        ip = None
-        try:
-            async with aiohttp.ClientSession(loop=self.loop) as session:
-                with async_timeout.timeout(self.timeout, loop=self.loop):
-                    async with session.request('GET', HTTP_CHECK_URL) as resp:
-                        body = await resp.read()
-                        data = json.loads(body.decode())
-                        ip = data['origin']
-            assert IP_REG.match(ip) is not None
-        except CancelledError:
-            raise
-        except Exception:
-            pass
-        return ip
 
     def _is_elite_proxy(self, data):
         if ',' in data['origin']:
