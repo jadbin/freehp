@@ -13,7 +13,7 @@ from aiohttp import web
 
 from freehp.spider import ProxySpider
 from freehp.utils import load_object, get_origin_ip
-from freehp import defaultconfig
+from freehp import config
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class ProxyManager:
             self.config.set('origin_ip', origin_ip)
         log.info('Origin IP address: %s', self.config['origin_ip'])
 
-        self._checker = self._load_checker(config.get("checker_cls"))
+        self._checker = self._load_checker(config.get('checker'))
         self._check_interval = self.config.get('check_interval')
         self._block_time = config.getint("block_time")
         self._proxy_queue = ProxyQueue(max_fail_times=config.getint("max_fail_times"),
@@ -48,6 +48,8 @@ class ProxyManager:
         self._check_futures_done = None
         self._label_futures = None
         self._label_futures_done = None
+        self._app_runner = None
+        self._tcp_site = None
         self._is_running = False
 
     def start(self):
@@ -80,23 +82,34 @@ class ProxyManager:
             return
         self._is_running = False
         log.info("Shutdown now")
+        cancelled_futures = []
+        if self._spider.futures:
+            for f in self._spider.futures:
+                cancelled_futures.append(f)
         self._spider.close()
         if self._futures:
             for f in self._futures:
                 f.cancel()
+                cancelled_futures.append(f)
             self._futures = None
             self._futures_done = None
         if self._check_futures:
             for f in self._check_futures:
                 f.cancel()
+                cancelled_futures.append(f)
             self._check_futures = None
             self._check_futures_done = None
         if self._label_futures:
             for f in self._label_futures:
                 f.cancel()
+                cancelled_futures.append(f)
             self._label_futures = None
             self._label_futures_done = None
-        await asyncio.sleep(0.001, loop=self.loop)
+        await self._tcp_site.stop()
+        self._tcp_site = None
+        await self._app_runner.cleanup()
+        self._app_runner = None
+        await asyncio.wait(cancelled_futures, loop=self.loop)
         self.loop.stop()
 
     def _init_server(self):
@@ -106,8 +119,10 @@ class ProxyManager:
         app.router.add_route("GET", "/proxies", self.get_proxies)
         host, port = bind.split(":")
         port = int(port)
-        self.loop.run_until_complete(
-            self.loop.create_server(app.make_handler(access_log=None, loop=self.loop), host, port))
+        self._app_runner = web.AppRunner(app, access_log=None)
+        self.loop.run_until_complete(self._app_runner.setup())
+        self._tcp_site = web.TCPSite(self._app_runner, host=host, port=port)
+        self.loop.run_until_complete(self._tcp_site.start())
 
     async def _add_proxy(self, proxies):
         t = int(time.time())
@@ -254,7 +269,7 @@ class ProxyManager:
 
 
 class ProxyQueue:
-    def __init__(self, max_fail_times=defaultconfig.max_fail_times, min_anonymity=defaultconfig.min_anonymity):
+    def __init__(self, max_fail_times=3, min_anonymity=0):
         self._max_fail_times = max_fail_times
         self._min_anonymity = min_anonymity
         self._queue = deque()

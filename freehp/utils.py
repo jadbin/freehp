@@ -5,6 +5,7 @@ from os.path import isfile
 import logging
 from importlib import import_module
 from asyncio import CancelledError
+import inspect
 
 import aiohttp
 import async_timeout
@@ -33,6 +34,12 @@ def load_config(fname):
     }
     exec(code, cfg, cfg)
     return cfg
+
+
+def iter_settings(config):
+    for key, value in config.items():
+        if not key.startswith('_') and not inspect.ismodule(value) and not inspect.isfunction(value):
+            yield key, value
 
 
 def configure_logging(name, config):

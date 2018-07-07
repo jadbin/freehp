@@ -23,7 +23,7 @@ class ProxySpider:
         self._headers = config.get("spider_headers", {})
         self._loop = loop or asyncio.get_event_loop()
 
-        self._futures = None
+        self.futures = None
         self._receivers = []
 
     @classmethod
@@ -34,16 +34,16 @@ class ProxySpider:
         self._receivers.append(receiver)
 
     def open(self):
-        self._futures = []
+        self.futures = []
         for p in self._proxy_pages:
             f = asyncio.ensure_future(self._update_proxy_task(self._proxy_pages[p]), loop=self._loop)
-            self._futures.append(f)
+            self.futures.append(f)
 
     def close(self):
-        if self._futures:
-            for f in self._futures:
+        if self.futures:
+            for f in self.futures:
                 f.cancel()
-            self._futures = None
+            self.futures = None
 
     async def _update_proxy_task(self, urls):
         if not isinstance(urls, list):

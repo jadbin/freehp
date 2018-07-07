@@ -1,13 +1,12 @@
 # coding=utf-8
 
 import logging
-from os.path import abspath, isfile
+from os.path import isfile
 
 from freehp.errors import UsageError
 from freehp import utils
 from freehp.version import __version__
 from freehp.manager import ProxyManager
-from freehp import defaultconfig
 from freehp import config
 from freehp import squid
 
@@ -16,8 +15,12 @@ log = logging.getLogger(__name__)
 
 class Command:
     def __init__(self):
-        self.config = config.Config()
+        self.config = config.BaseConfig()
         self.exitcode = 0
+        self.settings = self._import_settings()
+
+    def _import_settings(self):
+        return []
 
     @property
     def name(self):
@@ -36,10 +39,14 @@ class Command:
         return self.short_desc
 
     def add_arguments(self, parser):
-        pass
+        for s in self.settings:
+            s.add_argument(parser)
 
     def process_arguments(self, args):
-        pass
+        for s in self.settings:
+            v = getattr(args, s.name)
+            if v is not None:
+                self.config.set(s.name, v)
 
     def run(self, args):
         raise NotImplementedError
@@ -58,56 +65,41 @@ class RunCommand(Command):
     def short_desc(self):
         return "Run spider to scrap free HTTP proxies"
 
+    def _import_settings(self):
+        settings = (config.Bind, config.Daemon, config.PidFile,
+                    config.LogLevel, config.LogFile,
+                    config.MinAnonymity, config.CheckerTimeout)
+        return [config.KNOWN_SETTINGS[i.name] for i in settings]
+
     def add_arguments(self, parser):
-        parser.add_argument('-c', '--config', metavar='FILE', help='configuration file')
-        parser.add_argument('-b', '--bind', dest='bind', metavar='ADDRESS', default=defaultconfig.bind,
-                            help='the socket to bind')
-        parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', default=defaultconfig.daemon,
-                            help='run in daemon mode')
-        parser.add_argument("-l", "--log-level", dest="log_level", metavar="LEVEL", default=defaultconfig.log_level,
-                            help="log level")
-        parser.add_argument("--log-file", dest="log_file", metavar="FILE", default=defaultconfig.log_file,
-                            help="log file")
-        parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
-                            default=defaultconfig.min_anonymity,
-                            help='minimum anonymity level, 0: transparent, 1: anonymous, 2: elite proxy')
-        parser.add_argument('--timeout', dest='timeout', type=float, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
-                            help='timeout in seconds')
+        parser.add_argument('-c', '--config', dest='config', metavar='FILE',
+                            help='configuration file')
+        super().add_arguments(parser)
         parser.add_argument("-s", "--set", dest="set", action="append", default=[], metavar="NAME=VALUE",
-                            help="set/override setting (may be repeated)")
+                            help="set/override setting (can be repeated)")
 
     def process_arguments(self, args):
-        if args.config:
-            if isfile(args.config):
-                for k, v in utils.load_config(args.config).items():
-                    self.config.set(k, v)
-            else:
-                self.exitcode = 1
-                print("Error: Cannot find '{}'".format(abspath(args.config)))
-                return
-        if args.bind:
-            self.config.set('bind', args.bind)
-        if args.daemon:
-            self.config.set('daemon', True)
-        if args.log_level:
-            self.config.set("log_level", args.log_level)
-        if args.log_file:
-            self.config.set('log_file', args.log_file)
-        if args.min_anonymity:
-            self.config.set('min_anonymity', args.min_anonymity)
-        if args.timeout:
-            self.config.set('timeout', args.timeout)
+        if args.config is not None:
+            try:
+                c = utils.load_config(args.config)
+            except Exception:
+                raise RuntimeError('Cannot read the configuration file {}'.format(args.config))
+            for k, v in utils.iter_settings(c):
+                self.config.set(k, v)
+        super().process_arguments(args)
         try:
             self.config.update(dict(x.split("=", 1) for x in args.set))
         except ValueError:
             raise UsageError("Invalid -s value, use -s NAME=VALUE")
 
     def run(self, args):
-        if self.config.getbool('daemon'):
+        cfg = config.Config()
+        cfg.update(self.config)
+        if cfg.getbool('daemon'):
             utils.be_daemon()
-        utils.configure_logging('freehp', self.config)
+        utils.configure_logging('freehp', cfg)
         try:
-            agent = ProxyManager(self.config)
+            agent = ProxyManager(cfg)
             agent.start()
         except Exception as e:
             log.error(e, exc_info=True)
@@ -125,6 +117,10 @@ class SquidCommand(Command):
     @property
     def short_desc(self):
         return "Append proxies to the configuration of squid"
+
+    def _import_settings(self):
+        settings = (config.LogLevel, config.LogFile)
+        return [config.KNOWN_SETTINGS[i.name] for i in settings]
 
     def add_arguments(self, parser):
         parser.add_argument('dest_file', metavar='DEST_FILE', nargs=1,
@@ -152,10 +148,7 @@ class SquidCommand(Command):
                             help='timeout in seconds')
         parser.add_argument('--once', dest='once', action='store_true', default=False,
                             help='run only once')
-        parser.add_argument("-l", "--log-level", dest="log_level", metavar="LEVEL", default=defaultconfig.log_level,
-                            help="log level")
-        parser.add_argument("--log-file", dest="log_file", metavar="FILE", default=defaultconfig.log_file,
-                            help="log file")
+        super().add_arguments(parser)
 
     def process_arguments(self, args):
         args.dest_file = args.dest_file[0]
@@ -163,10 +156,6 @@ class SquidCommand(Command):
             if not isfile(args.dest_file):
                 raise UsageError('The template of squid configuration is not specified')
             args.template = args.dest_file
-        if args.log_level:
-            self.config.set("log_level", args.log_level)
-        if args.log_file:
-            self.config.set('log_file', args.log_file)
 
     def run(self, args):
         if config.getbool(args.daemon):
