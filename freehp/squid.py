@@ -171,6 +171,7 @@ class SquidSetting(Setting):
     name = 'squid'
     cli = ['--squid']
     metavar = 'NAME'
+    default = 'squid3'
     short_desc = 'the name of squid command'
 
 
