@@ -6,43 +6,37 @@ import signal
 import json
 from asyncio import CancelledError
 import os
+import inspect
 
 import aiohttp
 import async_timeout
 
+from freehp.config import Setting, Config
+
 log = logging.getLogger(__name__)
-
-DEFAULT_UPDATE_INTERVAL = 60
-DEFAULT_FREEHP_ADDRESS = 'localhost:6256'
-DEFAULT_SQUID = 'squid3'
-DEFAULT_TIMEOUT = 30
-DEFAULT_MAX_NUM = 0
-DEFAULT_MIN_ANONYMITY = 1
-DEFAULT_HTTPS = False
-DEFAULT_POST = False
-
-PEER_CONF = 'cache_peer {} parent {} 0 no-query weighted-round-robin weight=1 connect-fail-limit=2 allow-miss max-conn=5 name={}\n'
-PEER_ACCESS_CONF = 'cache_peer_access {} {} {}\n'
 
 
 class Squid:
-    def __init__(self, dest_file, tpl_file, squid=DEFAULT_SQUID, update_interval=DEFAULT_UPDATE_INTERVAL,
-                 timeout=DEFAULT_TIMEOUT, once=False, min_anonymity=DEFAULT_MIN_ANONYMITY, **kwargs):
+    PEER_CONF = 'cache_peer {} parent {} 0 no-query weighted-round-robin weight=1 connect-fail-limit=2 allow-miss max-conn=5 name={}\n'
+    PEER_ACCESS_CONF = 'cache_peer_access {} {} {}\n'
+
+    def __init__(self, dest_file, tpl_file, config=None):
         self.loop = asyncio.new_event_loop()
         self._dest_file = dest_file
         with open(tpl_file, 'rb') as f:
             self._template = f.read().decode()
-        self._squid = squid
-        self._update_interval = update_interval
-        self._timeout = timeout
-        self._once = once
-        self._min_anonymity = min_anonymity
-        self._request_urls = self._construct_request_urls(**kwargs)
+        self._config = config or SquidConfig()
+        self._request_urls = self._construct_request_urls()
         self._futures = None
         self._is_running = False
 
-    def _construct_request_urls(self, address=DEFAULT_FREEHP_ADDRESS, max_num=DEFAULT_MAX_NUM,
-                                https=DEFAULT_HTTPS, post=DEFAULT_POST, **kwargs):
+    def _construct_request_urls(self):
+        address = self._config.get('address')
+        max_num = self._config.getint('max_num')
+        min_anonymity = self._config.getint('min_anonymity')
+        https = self._config.getbool('https')
+        post = self._config.getbool('post')
+
         if not address.startswith('http://') and not address.startswith('https://'):
             address = 'http://' + address
         if not address.endswith('/'):
@@ -50,13 +44,13 @@ class Squid:
         address += 'proxies'
 
         urls = []
-        url = '{}?count={}&min_anonymity={}&detail'.format(address, max_num, self._min_anonymity)
+        url = '{}?count={}&min_anonymity={}&detail'.format(address, max_num, min_anonymity)
         urls.append(url)
         if https:
             url = '{}?count={}&https&detail'.format(address, max_num)
             urls.append(url)
         if post:
-            url = '{}?count={}&min_anonymity={}&post&detail'.format(address, max_num, self._min_anonymity)
+            url = '{}?count={}&min_anonymity={}&post&detail'.format(address, max_num, min_anonymity)
             urls.append(url)
         return urls
 
@@ -64,7 +58,7 @@ class Squid:
         if not self._is_running:
             self._is_running = True
             asyncio.set_event_loop(self.loop)
-            if self._once:
+            if self._config.getbool('once'):
                 log.info('Run only once')
                 self.loop.run_until_complete(self._maintain_squid())
                 self._is_running = False
@@ -98,17 +92,20 @@ class Squid:
         self._recover_configuration()
 
     async def _maintain_squid_task(self):
+        update_interval = self._config.getfloat('update_interval')
         while True:
             await self._maintain_squid()
-            await asyncio.sleep(self._update_interval, loop=self.loop)
+            await asyncio.sleep(update_interval, loop=self.loop)
 
     async def _maintain_squid(self):
         data = []
         proxies = set()
+        timeout = self._config.getfloat('timeout')
         try:
             for url in self._request_urls:
                 async with aiohttp.ClientSession(loop=self.loop) as session:
-                    with async_timeout.timeout(self._timeout, loop=self.loop):
+                    with async_timeout.timeout(timeout, loop=self.loop):
+                        log.debug('Request url: %s', url)
                         async with session.get(url) as resp:
                             body = await resp.read()
                             d = json.loads(body.decode('utf-8'))
@@ -130,26 +127,28 @@ class Squid:
                 log.error("Failed to reconfigure squid", exc_info=True)
 
     def _reconfigure_squid(self, proxies):
+        min_anonymity = self._config.getint('min_anonymity')
+        squid = self._config.get('squid')
         lines = [self._template, '\n# cache_peer configuration\n']
         for p in proxies:
             host, port = p['address'].split(':')
             name = host + '.' + port
-            lines.append(PEER_CONF.format(host, port, name))
+            lines.append(self.PEER_CONF.format(host, port, name))
             dl = []
-            if p['anonymity'] < self._min_anonymity:
+            if p['anonymity'] < min_anonymity:
                 dl.append('!SSL_ports')
             if not p['https']:
                 dl.append('SSL_ports')
             if not p['post']:
                 dl.append('POST')
             if len(dl) > 0:
-                lines.append(PEER_ACCESS_CONF.format(name, 'deny', ' '.join(dl)))
+                lines.append(self.PEER_ACCESS_CONF.format(name, 'deny', ' '.join(dl)))
 
         with open(self._dest_file, 'w') as f:
             f.writelines(lines)
         log.info('Reconfigure squid with %s proxies, conf=%s', len(proxies), self._dest_file)
         try:
-            if os.system('{} -k reconfigure'.format(self._squid)) != 0:
+            if os.system('{} -k reconfigure'.format(squid)) != 0:
                 raise RuntimeError
         except RuntimeError:
             self._recover_configuration()
@@ -158,3 +157,83 @@ class Squid:
     def _recover_configuration(self):
         with open(self._dest_file, 'w') as f:
             f.write(self._template)
+
+
+class AddressSetting(Setting):
+    name = 'address'
+    cli = ['-a', '--address']
+    metavar = 'ADDRESS'
+    default = 'localhost:6256'
+    short_desc = 'the address of freehp'
+
+
+class SquidSetting(Setting):
+    name = 'squid'
+    cli = ['--squid']
+    metavar = 'NAME'
+    short_desc = 'the name of squid command'
+
+
+class MaxNumSetting(Setting):
+    name = 'max_num'
+    cli = ['--max-num']
+    metavar = 'INT'
+    default = 0
+    short_desc = 'maximal number of proxies to preserve the quality of proxies, 0 for unlimited'
+
+
+class HttpsSetting(Setting):
+    name = 'https'
+    cli = ['--https']
+    action = 'store_true'
+    default = False
+    short_desc = 'configure a list of proxies which support for HTTPS'
+
+
+class PostSetting(Setting):
+    name = 'post'
+    cli = ['--post']
+    action = 'store_true'
+    default = False
+    short_desc = 'configure a list of proxies which support for POST'
+
+
+class UpdateIntervalSetting(Setting):
+    name = 'update_interval'
+    cli = ['--update-interval']
+    metavar = 'SECONDS'
+    type = float
+    default = 60
+    short_desc = 'update interval in seconds'
+
+
+class TimeoutSetting(Setting):
+    name = 'timeout'
+    cli = ['--timeout']
+    metavar = 'SECONDS'
+    type = float
+    default = 30
+    short_desc = 'timeout in seconds'
+
+
+class OnceSetting(Setting):
+    name = 'once'
+    cli = ['--once']
+    action = 'store_true'
+    default = False
+    short_desc = 'run only once'
+
+
+KNOWN_SETTINGS = {}
+
+for _v in list(vars().values()):
+    if inspect.isclass(_v) and issubclass(_v, Setting) and _v.name is not None:
+        KNOWN_SETTINGS[_v.name] = _v()
+
+
+class SquidConfig(Config):
+    def __init__(self, values=None):
+        super().__init__()
+        for v in KNOWN_SETTINGS.values():
+            self.set(v.name, v.value)
+        self.update(values)

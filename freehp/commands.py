@@ -17,10 +17,19 @@ class Command:
     def __init__(self):
         self.config = config.BaseConfig()
         self.exitcode = 0
-        self.settings = self._import_settings()
+        self.settings = self._make_settings()
 
     def _import_settings(self):
-        return []
+        pass
+
+    def _make_settings(self):
+        settings = []
+        classes = self._import_settings()
+        if classes is not None:
+            for cls in classes:
+                if issubclass(cls, config.Setting):
+                    settings.append(cls())
+        return settings
 
     @property
     def name(self):
@@ -66,10 +75,9 @@ class RunCommand(Command):
         return "Run spider to scrap free HTTP proxies"
 
     def _import_settings(self):
-        settings = (config.Bind, config.Daemon, config.PidFile,
-                    config.LogLevel, config.LogFile,
-                    config.MinAnonymity, config.CheckerTimeout)
-        return [config.KNOWN_SETTINGS[i.name] for i in settings]
+        return (config.Bind, config.Daemon, config.PidFile,
+                config.LogLevel, config.LogFile,
+                config.MinAnonymity, config.CheckerTimeout)
 
     def add_arguments(self, parser):
         parser.add_argument('-c', '--config', dest='config', metavar='FILE',
@@ -119,35 +127,17 @@ class SquidCommand(Command):
         return "Append proxies to the configuration of squid"
 
     def _import_settings(self):
-        settings = (config.LogLevel, config.LogFile)
-        return [config.KNOWN_SETTINGS[i.name] for i in settings]
+        return (squid.AddressSetting, squid.SquidSetting,
+                config.Daemon, config.MinAnonymity,
+                squid.MaxNumSetting, squid.HttpsSetting, squid.PostSetting,
+                squid.UpdateIntervalSetting, squid.TimeoutSetting, squid.OnceSetting,
+                config.LogLevel, config.LogFile)
 
     def add_arguments(self, parser):
-        parser.add_argument('dest_file', metavar='DEST_FILE', nargs=1,
+        parser.add_argument('dest_file', metavar='FILE', nargs=1,
                             help='where the squid configuration file is')
-        parser.add_argument('-a', '--address', dest='address', metavar='ADDRESS', default=squid.DEFAULT_FREEHP_ADDRESS,
-                            help='the address of freehp')
-        parser.add_argument('--template', dest='template', metavar='FILE',
-                            help='the template of squid configuration, default is <DEST_FILE>')
-        parser.add_argument('--squid', dest='squid', metavar='squid', default=squid.DEFAULT_SQUID,
-                            help='the name of squid command')
-        parser.add_argument('-d', '--daemon', dest='daemon', action='store_true', default=False,
-                            help='run in daemon mode')
-        parser.add_argument('--min-anonymity', dest='min_anonymity', type=int, metavar='ANONYMITY',
-                            default=squid.DEFAULT_MIN_ANONYMITY,
-                            help='minimum anonymity level, 0: transparent, 1: anonymous, 2: elite proxy')
-        parser.add_argument('--max-num', dest='max_num', type=int, metavar='NUM', default=squid.DEFAULT_MAX_NUM,
-                            help='maximal number of proxies to preserve the quality of proxies, 0 for unlimited')
-        parser.add_argument('--https', dest='https', action='store_true', default=squid.DEFAULT_HTTPS,
-                            help='configure a list of proxies which support for HTTPS')
-        parser.add_argument('--post', dest='post', action='store_true', default=squid.DEFAULT_POST,
-                            help='configure a list of proxies which support for POST')
-        parser.add_argument('--update-interval', dest='update_interval', type=float, metavar='SECONDS',
-                            default=squid.DEFAULT_UPDATE_INTERVAL, help='update interval in seconds')
-        parser.add_argument('--timeout', dest='timeout', type=float, metavar='SECONDS', default=squid.DEFAULT_TIMEOUT,
-                            help='timeout in seconds')
-        parser.add_argument('--once', dest='once', action='store_true', default=False,
-                            help='run only once')
+        parser.add_argument('-t', '--template', dest='template', metavar='FILE',
+                            help='the template of squid configuration, default is the configuration file')
         super().add_arguments(parser)
 
     def process_arguments(self, args):
@@ -156,15 +146,16 @@ class SquidCommand(Command):
             if not isfile(args.dest_file):
                 raise UsageError('The template of squid configuration is not specified')
             args.template = args.dest_file
+        super().process_arguments(args)
 
     def run(self, args):
-        if config.getbool(args.daemon):
+        cfg = squid.SquidConfig()
+        cfg.update(self.config)
+        if cfg.getbool('daemon'):
             utils.be_daemon()
-        utils.configure_logging('freehp', self.config)
+        utils.configure_logging('freehp', cfg)
         try:
-            s = squid.Squid(args.dest_file, args.template, address=args.address, max_num=args.max_num,
-                            min_anonymity=args.min_anonymity, https=args.https, post=args.post,
-                            update_interval=args.update_interval, timeout=args.timeout, once=args.once)
+            s = squid.Squid(args.dest_file, args.template, config=cfg)
             s.start()
         except Exception as e:
             log.error(e, exc_info=True)

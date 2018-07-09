@@ -13,7 +13,6 @@ from aiohttp import web
 
 from freehp.spider import ProxySpider
 from freehp.utils import load_object, get_origin_ip
-from freehp import config
 
 log = logging.getLogger(__name__)
 
@@ -209,7 +208,7 @@ class ProxyManager:
                     if i not in futures_done:
                         futures.add(i)
                         reason = "cancelled" if f.cancelled() else str(f.exception())
-                        log.error("%s[%s] is shut down: %s", name, i, reason)
+                        log.error("%s[%s] is shutdown: %s", name, i, reason)
                         self._check_futures[i] = None
 
         while True:
