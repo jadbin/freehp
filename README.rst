@@ -2,9 +2,11 @@
 freehp
 ======
 
+.. image:: https://travis-ci.org/jadbin/freehp.svg?branch=master
+    :target: https://travis-ci.org/jadbin/freehp
+
 .. image:: https://img.shields.io/badge/license-Apache 2-blue.svg
     :target: https://github.com/jadbin/freehp/blob/master/LICENSE
-
 
 Key Features
 ============
