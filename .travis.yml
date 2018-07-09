@@ -17,5 +17,3 @@ install:
   - pip install tox
 script:
   - tox --recreate
-after_success:
-  - coveralls
