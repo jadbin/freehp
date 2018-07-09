@@ -21,7 +21,11 @@ class Squid:
     PEER_ACCESS_CONF = 'cache_peer_access {} {} {}\n'
 
     def __init__(self, dest_file, tpl_file, config=None):
-        self.loop = asyncio.new_event_loop()
+        try:
+            self.loop = asyncio.get_event_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         self._dest_file = dest_file
         with open(tpl_file, 'rb') as f:
             self._template = f.read().decode()
@@ -57,7 +61,6 @@ class Squid:
     def start(self):
         if not self._is_running:
             self._is_running = True
-            asyncio.set_event_loop(self.loop)
             if self._config.getbool('once'):
                 log.info('Run only once')
                 self.loop.run_until_complete(self._maintain_squid())

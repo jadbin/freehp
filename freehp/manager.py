@@ -20,7 +20,11 @@ log = logging.getLogger(__name__)
 class ProxyManager:
     def __init__(self, config):
         self.config = config
-        self.loop = asyncio.new_event_loop()
+        try:
+            self.loop = asyncio.get_event_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
 
         if not self.config.get('origin_ip'):
             origin_ip = self.loop.run_until_complete(get_origin_ip(self.loop))
@@ -54,7 +58,6 @@ class ProxyManager:
     def start(self):
         if not self._is_running:
             self._is_running = True
-            asyncio.set_event_loop(self.loop)
             self._futures = []
             self._futures_done = set()
             self._check_futures = []
