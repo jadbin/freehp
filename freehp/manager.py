@@ -66,20 +66,23 @@ class ProxyManager:
             self._spider.open()
             f = asyncio.ensure_future(self._supervisor(), loop=self.loop)
             self._futures.append(f)
-            self.loop.add_signal_handler(signal.SIGINT,
-                                         lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
-            self.loop.add_signal_handler(signal.SIGTERM,
-                                         lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
+            self.loop.add_signal_handler(signal.SIGINT, lambda sig=signal.SIGINT: self.shutdown(sig=sig))
+            self.loop.add_signal_handler(signal.SIGTERM, lambda sig=signal.SIGTERM: self.shutdown(sig=sig))
             try:
                 self.loop.run_forever()
             except Exception:
                 log.error("Unexpected error occurred when run loop", exc_info=True)
                 raise
 
-    async def shutdown(self):
+    def shutdown(self, sig=None):
+        if sig is not None:
+            log.info('Received shutdown signal: %s', sig)
         if not self._is_running:
             return
         self._is_running = False
+        asyncio.ensure_future(self._shutdown(), loop=self.loop)
+
+    async def _shutdown(self):
         log.info("Shutdown now")
         cancelled_futures = []
         if self._spider.futures:
@@ -110,6 +113,8 @@ class ProxyManager:
         self._app_runner = None
         await asyncio.wait(cancelled_futures, loop=self.loop)
         self.loop.stop()
+        self.loop.remove_signal_handler(signal.SIGINT)
+        self.loop.remove_signal_handler(signal.SIGTERM)
 
     def _init_server(self):
         bind = self.config.get('bind')

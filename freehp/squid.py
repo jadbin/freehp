@@ -67,10 +67,8 @@ class Squid:
                 self._futures = []
                 f = asyncio.ensure_future(self._maintain_squid_task(), loop=self.loop)
                 self._futures.append(f)
-                self.loop.add_signal_handler(signal.SIGINT,
-                                             lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
-                self.loop.add_signal_handler(signal.SIGTERM,
-                                             lambda loop=self.loop: asyncio.ensure_future(self.shutdown(), loop=loop))
+                self.loop.add_signal_handler(signal.SIGINT, lambda sig=signal.SIGINT: self.shutdown(sig=sig))
+                self.loop.add_signal_handler(signal.SIGTERM, lambda sig=signal.SIGTERM: self.shutdown(sig=sig))
                 log.info('Run forever')
                 try:
                     self.loop.run_forever()
@@ -78,16 +76,23 @@ class Squid:
                     log.error("Unexpected error occurred when run loop", exc_info=True)
                     raise
 
-    async def shutdown(self):
+    def shutdown(self, sig=None):
+        if sig is not None:
+            log.info('Received shutdown signal: %s', sig)
         if not self._is_running:
             return
         self._is_running = False
+        asyncio.ensure_future(self._shutdown(), loop=self.loop)
+
+    async def _shutdown(self):
         log.info("Shutdown now")
         if self._futures:
             for f in self._futures:
                 f.cancel()
             self._futures = None
         await asyncio.sleep(0.001, loop=self.loop)
+        self.loop.remove_signal_handler(signal.SIGINT)
+        self.loop.remove_signal_handler(signal.SIGTERM)
         self.loop.stop()
         self._recover_configuration()
 
