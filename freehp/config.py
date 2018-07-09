@@ -187,6 +187,7 @@ class Bind(Setting):
     name = 'bind'
     cli = ['-b', '--bind']
     metavar = 'ADDRESS'
+    default = '0.0.0.0:6256'
     short_desc = 'the socket to bind'
 
 
