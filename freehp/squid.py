@@ -163,9 +163,9 @@ class Squid:
             if p.returncode != 0:
                 msg = ''
                 if err:
-                    msg = err.decode()
+                    msg = err.decode().strip()
                 elif out:
-                    msg = out.decode()
+                    msg = out.decode().strip()
                 raise RuntimeError(msg)
         except Exception:
             self._recover_configuration()
