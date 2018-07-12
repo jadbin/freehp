@@ -76,9 +76,8 @@ class Squid:
                 log.info('Run forever')
                 try:
                     self.loop.run_forever()
-                except Exception:
-                    log.error("Unexpected error occurred when run loop", exc_info=True)
-                    raise
+                except Exception as e:
+                    log.error("Unexpected error occurred when run loop: %s", e)
 
     def shutdown(self, sig=None):
         if sig is not None:

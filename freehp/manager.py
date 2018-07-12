@@ -73,9 +73,8 @@ class ProxyManager:
             self.loop.add_signal_handler(signal.SIGTERM, lambda sig=signal.SIGTERM: self.shutdown(sig=sig))
             try:
                 self.loop.run_forever()
-            except Exception:
-                log.error("Unexpected error occurred when run loop", exc_info=True)
-                raise
+            except Exception as e:
+                log.error("Unexpected error occurred when run loop: %s", e)
 
     def shutdown(self, sig=None):
         if sig is not None:
@@ -143,8 +142,8 @@ class ProxyManager:
                 await self._wait_queue.put(proxy)
             except CancelledError:
                 raise
-            except Exception:
-                log.warning("Failed to add proxy '%s'", p, exc_info=True)
+            except Exception as e:
+                log.warning("Failed to add proxy '%s': %s", p, e)
 
     def _init_checker(self):
         checker_clients = self.config.getint('checker_clients')

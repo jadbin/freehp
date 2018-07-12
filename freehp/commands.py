@@ -107,10 +107,11 @@ class RunCommand(Command):
             utils.be_daemon()
         utils.configure_logging('freehp', cfg)
         try:
-            agent = ProxyManager(cfg)
-            agent.start()
+            manager = ProxyManager(cfg)
         except Exception as e:
-            log.error(e, exc_info=True)
+            log.error('Failed to create proxy manager: %s', e)
+            raise
+        manager.start()
 
 
 class SquidCommand(Command):
@@ -156,9 +157,10 @@ class SquidCommand(Command):
         utils.configure_logging('freehp', cfg)
         try:
             s = squid.Squid(args.dest_file, args.template, config=cfg)
-            s.start()
         except Exception as e:
-            log.error(e, exc_info=True)
+            log.error('Failed to create squid worker: %s', e)
+            raise
+        s.start()
 
 
 class VersionCommand(Command):
