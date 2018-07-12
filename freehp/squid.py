@@ -7,6 +7,7 @@ import json
 from asyncio import CancelledError
 import os
 import inspect
+import subprocess
 
 import aiohttp
 import async_timeout
@@ -125,14 +126,14 @@ class Squid:
             log.debug('Get %s proxies', len(data))
         except CancelledError:
             raise
-        except Exception:
-            log.error("Failed to get proxies", exc_info=True)
+        except Exception as e:
+            log.error("Failed to get proxies: %s", e)
 
         if len(data) > 0:
             try:
                 self._reconfigure_squid(data)
-            except Exception:
-                log.error("Failed to reconfigure squid", exc_info=True)
+            except Exception as e:
+                log.error("Failed to reconfigure squid: %s", e)
 
     def _reconfigure_squid(self, proxies):
         min_anonymity = self._config.getint('min_anonymity')
@@ -156,9 +157,17 @@ class Squid:
             f.writelines(lines)
         log.info('Reconfigure squid with %s proxies, conf=%s', len(proxies), self._dest_file)
         try:
-            if os.system('{} -k reconfigure'.format(squid)) != 0:
-                raise RuntimeError
-        except RuntimeError:
+            p = subprocess.Popen('{} -k reconfigure'.format(squid), shell=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = p.communicate()
+            if p.returncode != 0:
+                msg = ''
+                if err:
+                    msg = err.decode()
+                elif out:
+                    msg = out.decode()
+                raise RuntimeError(msg)
+        except Exception:
             self._recover_configuration()
             raise
 
