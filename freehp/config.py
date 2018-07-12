@@ -264,10 +264,6 @@ class ProxyPages(Setting):
     name = 'proxy_pages'
 
 
-class Address(Setting):
-    name = 'address'
-
-
 KNOWN_SETTINGS = {}
 
 for _v in list(vars().values()):

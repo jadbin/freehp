@@ -5,7 +5,6 @@ import asyncio
 import signal
 import json
 from asyncio import CancelledError
-import os
 import inspect
 import subprocess
 

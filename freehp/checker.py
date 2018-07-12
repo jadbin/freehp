@@ -27,7 +27,10 @@ class HttpbinChecker:
         config = manager.config
         return cls(loop=manager.loop, checker_timeout=config.get('checker_timeout'), origin_ip=config.get('origin_ip'))
 
-    async def check_proxy(self, addr, https=False):
+    async def check_proxy(self, addr):
+        return await self._check_proxy(addr)
+
+    async def _check_proxy(self, addr, https=False):
         anonymity = 0
         if not addr.startswith("http://"):
             proxy = "http://{0}".format(addr)
@@ -54,6 +57,12 @@ class HttpbinChecker:
             return False
         log.debug("Proxy %s supports for %s", addr, 'HTTPS' if https else 'HTTP')
         return True, anonymity
+
+    async def verify_https(self, addr):
+        https = await  self._check_proxy(addr, https=True)
+        if https and https[1] > 0:
+            return True
+        return False
 
     async def verify_post(self, addr):
         if not addr.startswith("http://"):
