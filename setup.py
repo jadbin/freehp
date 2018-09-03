@@ -51,7 +51,7 @@ def main():
             "console_scripts": ["freehp = freehp.cli:main"]
         },
         install_requires=install_requires,
-        tests_require=tests_requires,
+        tests_require=tests_require,
         cmdclass={"test": PyTest},
         classifiers=[
             "License :: OSI Approved :: Apache Software License",
