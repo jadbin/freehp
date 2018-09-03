@@ -37,7 +37,10 @@ class HttpbinChecker:
         else:
             proxy = addr
         try:
-            async with aiohttp.ClientSession(loop=self.loop) as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False,
+                                                                            enable_cleanup_closed=True,
+                                                                            loop=self.loop),
+                                             loop=self.loop) as session:
                 with async_timeout.timeout(self.timeout, loop=self.loop):
                     seed = str(random.randint(0, 99999999))
                     url = "{}?show_env=1&seed={}".format(self.HTTPS_CHECK_URL if https else self.HTTP_CHECK_URL, seed)
@@ -70,7 +73,10 @@ class HttpbinChecker:
         else:
             proxy = addr
         try:
-            async with aiohttp.ClientSession(loop=self.loop) as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False,
+                                                                            enable_cleanup_closed=True,
+                                                                            loop=self.loop),
+                                             loop=self.loop) as session:
                 with async_timeout.timeout(self.timeout, loop=self.loop):
                     seed = str(random.randint(0, 99999999))
                     form_data = aiohttp.FormData()

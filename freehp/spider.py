@@ -61,7 +61,10 @@ class ProxySpider:
             while retry_cnt > 0:
                 retry_cnt -= 1
                 try:
-                    async with aiohttp.ClientSession(loop=self._loop) as session:
+                    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False,
+                                                                                    enable_cleanup_closed=True,
+                                                                                    loop=self._loop),
+                                                     loop=self._loop) as session:
                         with async_timeout.timeout(self._timeout, loop=self._loop):
                             async with session.request("GET", url, headers=self._headers) as resp:
                                 body = await resp.read()
