@@ -1,18 +1,27 @@
 # coding=utf-8
 
 import sys
-from os.path import abspath, join, dirname
+from os.path import join, dirname
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 
-with open("README.rst") as fd:
+with open(join(dirname(__file__), 'README.rst'), 'r', encoding='utf-8') as fd:
     long_description = fd.read()
 
 
 def read_version():
-    p = join(abspath(dirname(__file__)), "freehp", "version.py")
-    with open(p, "rb") as f:
-        return f.read().decode("utf-8").split("=")[-1].strip().strip('"')
+    p = join(dirname(__file__), "freehp", "version.py")
+    with open(p, 'r', encoding='utf-8') as f:
+        return f.read().split("=")[-1].strip().strip('"')
+
+
+install_requires = [
+    "aiohttp>=3.3.2,<4.0",
+    "lxml>=4.1.0,<5.0"
+]
+
+with open(join(dirname(__file__), 'requirements_test.txt'), 'r', encoding='utf-8') as f:
+    tests_require = [l.strip() for l in f]
 
 
 class PyTest(TestCommand):
@@ -26,11 +35,6 @@ class PyTest(TestCommand):
 def main():
     if sys.version_info < (3, 5, 3):
         raise RuntimeError("Python 3.5.3+ is required")
-    install_requires = [
-        "aiohttp>=3.3.2,<4.0",
-        "lxml>=4.1.0,<5.0"
-    ]
-    tests_requires = install_requires + ["pytest", "pytest-aiohttp"]
     setup(
         name="freehp",
         version=read_version(),

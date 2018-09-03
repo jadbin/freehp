@@ -1,5 +1,6 @@
 include README.rst
 include LICENSE
+include requirements_test.txt
 graft freehp
 graft conf
 graft tests
