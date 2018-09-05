@@ -50,6 +50,7 @@ def main():
         entry_points={
             "console_scripts": ["freehp = freehp.cli:main"]
         },
+        python_requires='>=3.5.3',
         install_requires=install_requires,
         tests_require=tests_require,
         cmdclass={"test": PyTest},
